@@ -13,7 +13,6 @@ export async function readText(bytes, path) {
   model.format = 'txt';
   model.extra.text = { encoding: info.encoding, bom: info.bom, eol: info.eol };
   model.styles.addStyleXml(PLAIN_STYLE);
-  model.styles.dirty = false;
   const lines = info.text.split(/\r\n|\n|\r/);
   if (lines.length > 1 && lines[lines.length - 1] === '') { lines.pop(); model.extra.text.trailingNewline = true; }
   const paras = lines.map((line) => {

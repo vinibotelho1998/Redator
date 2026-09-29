@@ -138,6 +138,9 @@
       const { p, bytes } = await open('texto-ansi.txt');
       const { data } = await app.serialize('txt', p);
       expect('txt Windows-1252 sem edição igual ao original', sameBytes(data, bytes), { original: bytes.length, gravado: data.length });
+      const docx = await rt.writeDocx(app.model, app.view.state.doc, { author: 'Teste' });
+      const stylesXml = await (await rt.JSZip.loadAsync(docx)).file('word/styles.xml').async('string');
+      expect('txt salvo como docx leva o estilo de texto simples', stylesXml.includes('w:styleId="PlainTextNotepad"'));
     }
 
     // 4a. Página salva da web: só o conteúdo
