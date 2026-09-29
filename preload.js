@@ -39,6 +39,8 @@ contextBridge.exposeInMainWorld('host', {
   edit: (action) => ipcRenderer.send('edit:action', action),
   findNote: (from, target) => ipcRenderer.invoke('file:find-note', from, target),
   ocr: (data, ext) => ipcRenderer.invoke('ocr:image', data, ext),
+  defaultStatus: () => ipcRenderer.invoke('app:default-status'),
+  openDefaultApps: () => ipcRenderer.invoke('app:open-default-apps'),
   saveRecovery: (data, meta) => ipcRenderer.invoke('recover:save', data, meta),
   clearRecovery: () => ipcRenderer.send('recover:clear'),
   takeRecovery: (id) => ipcRenderer.invoke('recover:take', id),

@@ -738,8 +738,25 @@ export function optionsDialog(app) {
   const units = select([['cm', 'Centímetros'], ['in', 'Polegadas'], ['pt', 'Pontos']], p.units || 'cm');
   const author = textInput(p.author || app.userName || '', { width: '240px' });
   const shortcuts = select([['intl', 'Padrão internacional: Ctrl+B negrito, Ctrl+S salvar'], ['pt', 'Word em português: Ctrl+N negrito, Ctrl+B salvar']], p.shortcuts || 'intl');
+  // aplicativo padrão: o Windows só deixa a escolha com quem usa, nas configurações
+  const defStatus = h('p', { class: 'dlg-p', text: 'Verificando...' });
+  const defBtn = h('button', { class: 'btn', type: 'button', text: 'Definir como padrão...', onclick: () => app.host.openDefaultApps && app.host.openDefaultApps() });
+  const defaults = groupBox('Aplicativo padrão',
+    h('p', { class: 'dlg-p', text: 'Para abrir documentos com dois cliques no Redator, escolha-o nas configurações do Windows.' }), defStatus, defBtn);
+  if (app.host.defaultStatus) {
+    app.host.defaultStatus().then((st) => {
+      const mine = Object.keys(st || {}).filter((e) => st[e]);
+      const rest = Object.keys(st || {}).filter((e) => !st[e]);
+      defStatus.textContent = !mine.length ? 'O Redator ainda não é o padrão para nenhum tipo de documento.'
+        : !rest.length ? 'O Redator já é o padrão para ' + mine.join(', ') + '.'
+          : 'Já é o padrão para ' + mine.join(', ') + '. Falta: ' + rest.join(', ') + '.';
+    }).catch(() => { defStatus.textContent = ''; });
+  } else {
+    defStatus.textContent = '';
+    defBtn.disabled = true;
+  }
   const body = tabs([
-    { label: 'Geral', body: h('div', {}, groupBox('Personalizar sua cópia', field('Nome de usuário:', author)), groupBox('Exibição', field('Mostrar medidas em:', units)), groupBox('Teclado', field('Atalhos de teclado:', shortcuts))) },
+    { label: 'Geral', body: h('div', {}, groupBox('Personalizar sua cópia', field('Nome de usuário:', author)), groupBox('Exibição', field('Mostrar medidas em:', units)), groupBox('Teclado', field('Atalhos de teclado:', shortcuts)), defaults) },
     { label: 'Revisão de Texto', body: h('div', {}, groupBox('Ao corrigir a ortografia', spell), groupBox('AutoFormatação ao digitar', smart, auto)) },
     { label: 'Salvar', body: h('div', {}, groupBox('Salvar documentos', recover)) },
   ]);

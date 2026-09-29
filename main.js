@@ -639,6 +639,40 @@ ipcMain.handle('shell:open-external', (_e, url) => {
 });
 
 ipcMain.handle('shell:open-path', (_e, p) => shell.openPath(p));
+
+// ---------------------------------------------------------------- aplicativo padrão
+// O Windows não deixa um programa se declarar padrão: mostra para que tipos o
+// Redator já é o escolhido e abre a página dele nas configurações.
+const DEFAULT_EXTS = ['.docx', '.doc', '.pdf', '.md', '.txt', '.rtf', '.odt', '.epub', '.csv'];
+
+function userChoice(ext) {
+  const base = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\' + ext;
+  const query = (key) => new Promise((resolve) => {
+    execFile('reg', ['query', base + '\\' + key, '/v', 'ProgId'], { windowsHide: true }, (err, stdout) => {
+      const m = !err && /ProgId\s+REG_SZ\s+(.+)/.exec(stdout || '');
+      resolve(m ? m[1].trim() : null);
+    });
+  });
+  // o Windows 11 mais novo guarda a escolha em UserChoiceLatest
+  return query('UserChoiceLatest').then((v) => v || query('UserChoice'));
+}
+
+ipcMain.handle('app:default-status', async () => {
+  if (process.platform !== 'win32') return {};
+  const out = {};
+  await Promise.all(DEFAULT_EXTS.map(async (e) => {
+    const prog = await userChoice(e);
+    out[e] = !!prog && /redator/i.test(prog);
+  }));
+  return out;
+});
+
+ipcMain.handle('app:open-default-apps', async () => {
+  try { await shell.openExternal('ms-settings:defaultapps?registeredAppUser=Redator'); } catch {
+    try { await shell.openExternal('ms-settings:defaultapps'); } catch { return false; }
+  }
+  return true;
+});
 ipcMain.handle('shell:show-item', (_e, p) => { shell.showItemInFolder(p); return true; });
 
 ipcMain.on('edit:action', (event, action) => {
