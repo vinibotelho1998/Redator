@@ -1,0 +1,65 @@
+name: Build e Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Rodar a bateria de testes
+        run: npm test
+
+      - name: Incrementar versao
+        id: versao
+        run: |
+          $nova = (npm version patch --no-git-tag-version).Trim().TrimStart('v')
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: incrementa versao para $nova [skip ci]"
+          git push origin HEAD:main
+          echo "numero=$nova" >> $env:GITHUB_OUTPUT
+
+      - name: Empacotar o app
+        run: npm run package
+
+      - name: Instalar Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Compilar instalador
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=${{ steps.versao.outputs.numero }}" packaging\Redator_Setup.iss
+
+      - name: Publicar release "latest"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --cleanup-tag --yes 2>$null
+          gh release create latest "out/Redator-Setup.exe" `
+            --title "Redator v${{ steps.versao.outputs.numero }}" `
+            --notes "Instalador gerado automaticamente do commit ${{ github.sha }} (versao ${{ steps.versao.outputs.numero }}). Abre e edita docx, odt, md, html e txt, exporta PDF e se registra no Abrir com do Windows. Nao exige Node nem o repositorio." `
+            --latest
