@@ -693,6 +693,8 @@ function attachTestHarness(win) {
         // janela escondida não se redesenha sozinha: pede um quadro novo antes de fotografar
         wc.invalidate();
         await wc.executeJavaScript('new Promise((r) => { requestAnimationFrame(() => requestAnimationFrame(r)); setTimeout(r, 400); })', true).catch(() => {});
+        // a primeira captura acorda a pintura e ainda devolve o quadro velho
+        if (HIDDEN_TEST) { await wc.capturePage(undefined, { stayHidden: true }); await sleep(250); }
         const img = await wc.capturePage(undefined, { stayHidden: true });
         fs.writeFileSync(path.join(outDir, arg), img.toPNG());
         console.log('TEST shot', arg);
