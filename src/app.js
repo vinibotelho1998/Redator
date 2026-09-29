@@ -101,6 +101,14 @@ class App {
     this.systemFonts = [];
     this.symbols = [];
     this.warnedLossy = new Set();
+    // AutoRecuperação: cada alteração muda o carimbo; a cópia guarda o último gravado
+    this.editStamp = 0;
+    this.recoverStamp = 0;
+    this.lastEdit = 0;
+    this.lastRecover = 0;
+    this.recoverJob = null;
+    this.recovered = false;
+    this.saving = false;
   }
 
   // ------------------------------------------------------------ inicialização
@@ -117,12 +125,20 @@ class App {
     this.bindEvents();
     this.host.systemFonts().then((list) => { this.systemFonts = list || []; }).catch(() => {});
     this.tryLocalFonts();
-    if (info.filePath) {
+    let restored = false;
+    if (info.recover) {
+      try { restored = await this.restoreRecovered(info.recover); } catch (err) { console.warn('Recuperação falhou', err); }
+    }
+    if (restored) {
+      // a janela voltou de uma falha com o documento recuperado
+    } else if (info.filePath) {
       try { await this.loadPath(info.filePath); }
       catch (err) { await this.newDocument(); this.showError('Não foi possível abrir o arquivo.', err); }
     } else {
       await this.newDocument();
     }
+    this.recoverTimer = setInterval(() => this.saveRecovery(), 10000);
+    if (info.recovered && info.recovered.length) setTimeout(() => this.offerRecovery(info.recovered), 400);
     if (this.prefs.navPane) this.showNavPane();
     if (this.prefs.testPage != null) {
       this.layout.runNow(8);
@@ -370,6 +386,8 @@ class App {
     this.docName = opts.name || 'Documento1';
     this.dirty = false;
     this.pristine = !opts.path;
+    this.recovered = false;
+    this.recoverStamp = this.editStamp;
     this.applyDocCss();
     this.layout.setModel(model);
     const state = createState(doc, this, { layout: this.layout });
@@ -416,18 +434,92 @@ class App {
   updateTitle() {
     const name = this.docName;
     this.titleText.textContent = name + ' - Redator';
-    this.titleState.textContent = this.dirty ? '• Não salvo' : this.filePath ? '• Salvo neste PC' : this.importPath ? '• Modo de compatibilidade' : '';
+    this.titleState.textContent = this.recovered ? '• Recuperado' : this.dirty ? '• Não salvo' : this.filePath ? '• Salvo neste PC' : this.importPath ? '• Modo de compatibilidade' : '';
     this.host.setDocState({ title: (this.dirty ? '* ' : '') + name + ' - Redator', dirty: this.dirty, filePath: this.filePath || this.importPath || null });
   }
 
   markDirty() {
     this.pristine = false;
+    this.editStamp++;
+    this.lastEdit = Date.now();
     if (!this.dirty) { this.dirty = true; this.updateTitle(); }
   }
 
   markClean() {
     this.dirty = false;
+    this.recovered = false;
+    this.recoverStamp = this.editStamp;
     this.updateTitle();
+    if (this.host.clearRecovery) this.host.clearRecovery();
+  }
+
+  // ------------------------------------------------------------ AutoRecuperação
+
+  // Grava uma cópia do documento quando há alterações novas, o usuário parou de
+  // digitar e já passou um minuto desde a última cópia.
+  saveRecovery(force) {
+    if (!this.host.saveRecovery || this.prefs.autoRecover === false || !this.view) return null;
+    if (!this.dirty || this.saving || this.recoverJob || this.recoverStamp === this.editStamp) return null;
+    const now = Date.now();
+    if (!force && (now - this.lastEdit < 2500 || now - this.lastRecover < 60000)) return null;
+    const stamp = this.editStamp;
+    const job = async () => {
+      const doc = this.view.state.doc;
+      const src = this.model.extra && this.model.extra.md;
+      const textInfo = (this.model.extra && this.model.extra.text) || null;
+      let data = null;
+      let kind = 'docx';
+      // Markdown aberto de um arquivo guarda o próprio texto, para não reescrever o arquivo inteiro ao salvar
+      if (this.format === 'md' && src && src.bound) {
+        const path = this.filePath || this.importPath || '';
+        const { text, files } = writeMarkdown(doc, this.model, { baseDir: dirName(path), baseName: stripExt(baseName(path) || this.docName) });
+        if (!files.length) { data = encodeText(text, textInfo || { encoding: 'utf-8', bom: false }); kind = 'md'; }
+      }
+      if (!data) data = await writeDocx(this.model, doc, { author: this.prefs.author || this.userName || '' });
+      const meta = { name: this.docName, path: this.filePath || this.importPath || null, format: this.format, kind, text: textInfo };
+      const id = await this.host.saveRecovery(data, meta);
+      if (id) { this.recoverStamp = stamp; this.recoverId = id; }
+    };
+    this.lastRecover = now;
+    this.recoverJob = job().catch((err) => console.warn('AutoRecuperação falhou', err)).finally(() => { this.recoverJob = null; });
+    return this.recoverJob;
+  }
+
+  async restoreRecovered(id) {
+    const r = await this.host.takeRecovery(id);
+    if (!r) return false;
+    const { meta, data } = r;
+    const res = meta.kind === 'md' ? await readMarkdown(data, meta.path || '', { host: this.host }) : await readDocx(data);
+    if (meta.kind !== 'md' && meta.text && ['md', 'txt'].includes(meta.format)) res.model.extra.text = meta.text;
+    this.setDocument(res.model, res.doc, { path: null, format: meta.format || 'docx', name: meta.name || 'Documento1' });
+    // salvar pede confirmação do local, que já vem com o arquivo original
+    this.importPath = meta.path || null;
+    this.recovered = true;
+    this.pristine = false;
+    this.dirty = true;
+    this.updateTitle();
+    this.setInfo('Documento recuperado');
+    return true;
+  }
+
+  async offerRecovery(list) {
+    const n = list.length;
+    const when = (t) => (t ? ', ' + new Date(t).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '');
+    const lines = list.slice(0, 6).map((e) => '• ' + e.name + when(e.time));
+    if (n > 6) lines.push('• e mais ' + (n - 6));
+    const head = n === 1 ? 'O Redator foi fechado sem salvar este documento:' : 'O Redator foi fechado sem salvar estes ' + n + ' documentos:';
+    const r = await D.messageBox('Recuperação de Documentos', head + '\n' + lines.join('\n') + '\nDeseja recuperar a última versão guardada?', [
+      { label: 'Recuperar', primary: true, value: 'ok' },
+      { label: 'Descartar', value: 'discard' },
+      { label: 'Agora não', value: 'later' },
+    ], { cancelValue: 'later', icon: 'warn' });
+    if (r === 'discard') { await this.host.discardRecovery(list.map((e) => e.id)); return; }
+    if (r !== 'ok') return;
+    let rest = list;
+    if (this.isPristine()) {
+      try { if (await this.restoreRecovered(list[0].id)) rest = list.slice(1); } catch (err) { this.showError('Não foi possível recuperar "' + list[0].name + '".', err); rest = list.slice(1); }
+    }
+    for (const e of rest) await this.host.openRecovered(e.id);
   }
 
   // ------------------------------------------------------------ salvar
@@ -486,7 +578,10 @@ class App {
     if (!(await this.confirmLossy(fmt))) return false;
     if (this.hfEdit) this.commitHeaderFooter();
     this.setBusy('Salvando...');
+    this.saving = true;
     try {
+      // a cópia de recuperação usa o mesmo pacote em memória; espera ela terminar
+      if (this.recoverJob) await this.recoverJob;
       const { data, extras } = await this.serialize(fmt, path);
       const res = await this.host.writeFile(path, data, extras);
       if (!res || !res.ok) {
@@ -507,6 +602,7 @@ class App {
       this.showError('Não foi possível salvar o documento.', err);
       return false;
     } finally {
+      this.saving = false;
       this.setBusy(null);
     }
   }

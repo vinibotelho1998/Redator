@@ -140,6 +140,33 @@
       expect('txt Windows-1252 sem edição igual ao original', sameBytes(data, bytes), { original: bytes.length, gravado: data.length });
     }
 
+    // 4b. AutoRecuperação: a cópia guardada volta com as alterações
+    {
+      const { p, bytes } = await open('readme-crlf.md');
+      insertAtStart(app.view, 'Um README comum', 'RECUPERADO ');
+      const edited = app.view.state.doc.textContent;
+      await app.saveRecovery(true);
+      if (app.recoverJob) await app.recoverJob;
+      const okMd = !!app.recoverId && await app.restoreRecovered(app.recoverId);
+      expect('recuperação: md volta com a edição', okMd && app.view.state.doc.textContent === edited && app.format === 'md' && app.dirty && app.recovered && app.importPath === p && !app.filePath,
+        { okMd, format: app.format, dirty: app.dirty, importPath: app.importPath });
+      const text = new TextDecoder().decode((await app.serialize('md', p)).data);
+      const d = diffLines(new TextDecoder().decode(bytes), text);
+      expect('recuperação: md salvo muda só a linha editada', d.removed.length === 1 && d.added.length === 1 && d.added[0].startsWith('RECUPERADO Um README') && text.includes('\r\n'), d);
+      await open('word.rtf');
+      insertAtStart(app.view, 'Título principal', 'NOVO ');
+      const t2 = app.view.state.doc.textContent;
+      await app.saveRecovery(true);
+      if (app.recoverJob) await app.recoverJob;
+      const okRtf = await app.restoreRecovered(app.recoverId);
+      expect('recuperação: rtf volta com a edição', okRtf && app.view.state.doc.textContent === t2 && app.format === 'rtf', { okRtf, format: app.format });
+      const id = app.recoverId;
+      app.markClean();
+      await sleep(100);
+      expect('recuperação: salvar apaga a cópia', (await host.takeRecovery(id)) === null);
+      app.pristine = true; app.dirty = false; app.filePath = null; app.importPath = null;
+    }
+
     // 5a. RTF no formato em que o Word grava
     {
       await open('word.rtf');

@@ -721,7 +721,7 @@ export function optionsDialog(app) {
   const spell = checkbox('Verificar ortografia ao digitar', p.spellcheck !== false);
   const smart = checkbox('Substituir aspas retas por aspas inteligentes', p.smartQuotes !== false);
   const auto = checkbox('Formatar automaticamente listas, travessões e símbolos ao digitar', p.autoFormat !== false);
-  const recover = checkbox('Salvar informações de AutoRecuperação a cada 5 minutos', p.autoRecover !== false);
+  const recover = checkbox('Salvar informações de AutoRecuperação a cada minuto', p.autoRecover !== false);
   const units = select([['cm', 'Centímetros'], ['in', 'Polegadas'], ['pt', 'Pontos']], p.units || 'cm');
   const author = textInput(p.author || app.userName || '', { width: '240px' });
   const shortcuts = select([['intl', 'Padrão internacional: Ctrl+B negrito, Ctrl+S salvar'], ['pt', 'Word em português: Ctrl+N negrito, Ctrl+B salvar']], p.shortcuts || 'intl');

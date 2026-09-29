@@ -38,6 +38,11 @@ contextBridge.exposeInMainWorld('host', {
   pathForFile: (file) => { try { return webUtils.getPathForFile(file); } catch { return ''; } },
   edit: (action) => ipcRenderer.send('edit:action', action),
   findNote: (from, target) => ipcRenderer.invoke('file:find-note', from, target),
+  saveRecovery: (data, meta) => ipcRenderer.invoke('recover:save', data, meta),
+  clearRecovery: () => ipcRenderer.send('recover:clear'),
+  takeRecovery: (id) => ipcRenderer.invoke('recover:take', id),
+  openRecovered: (id) => ipcRenderer.invoke('recover:open', id),
+  discardRecovery: (ids) => ipcRenderer.invoke('recover:discard', ids),
   checkWord: (word) => ipcRenderer.invoke('spell:suggest', word),
   addWord: (word) => ipcRenderer.invoke('spell:add-word', word),
   on: (channel, fn) => {

@@ -22,6 +22,7 @@ const userData = app.getPath('userData');
 const recentFile = path.join(userData, 'recentes.json');
 const windowStateFile = path.join(userData, 'janela.json');
 const prefsFile = path.join(userData, 'preferencias.json');
+const recoverDir = path.join(userData, 'Recuperacao');
 
 // ---------------------------------------------------------------- utilidades
 
@@ -80,6 +81,53 @@ function removeRecent(p) {
   return list;
 }
 
+// ---------------------------------------------------------------- AutoRecuperação
+// Cada janela com alterações guarda uma cópia do documento aqui. A cópia some
+// quando a janela fecha normalmente; se o programa ou o PC cair, ela fica e é
+// oferecida na próxima abertura.
+
+const RECOVER_ID = /^[a-z0-9-]{4,40}$/;
+let leftovers = [];
+
+function recoverFiles(id) {
+  return { data: path.join(recoverDir, id + '.dados'), meta: path.join(recoverDir, id + '.json') };
+}
+
+function removeRecovery(id) {
+  if (!RECOVER_ID.test(String(id))) return;
+  const f = recoverFiles(id);
+  for (const p of [f.data, f.meta, f.data + '.tmp', f.meta + '.tmp']) {
+    try { fs.unlinkSync(p); } catch { /* já não existe */ }
+  }
+}
+
+function scanRecovery() {
+  let names = [];
+  try { names = fs.readdirSync(recoverDir); } catch { return []; }
+  const out = [];
+  for (const n of names) {
+    const m = /^([a-z0-9-]+)\.json$/.exec(n);
+    if (!m) continue;
+    const meta = readJson(path.join(recoverDir, n), null);
+    let size = 0;
+    try { size = fs.statSync(recoverFiles(m[1]).data).size; } catch { /* sem dados */ }
+    if (meta && size) out.push({ id: m[1], name: meta.name || 'Documento', path: meta.path || null, time: meta.time || 0 });
+    else removeRecovery(m[1]);
+  }
+  // sobras de uma gravação interrompida antes de a ficha existir
+  for (const n of names) {
+    const m = /^([a-z0-9-]+)\.(dados|json)\.tmp$|^([a-z0-9-]+)\.dados$/.exec(n);
+    const id = m && (m[1] || m[3]);
+    if (id && !out.some((e) => e.id === id)) { try { fs.unlinkSync(path.join(recoverDir, n)); } catch { /* ignora */ } }
+  }
+  return out.sort((a, b) => b.time - a.time);
+}
+
+async function writeAtomic(p, data) {
+  await fs.promises.writeFile(p + '.tmp', data);
+  await fs.promises.rename(p + '.tmp', p);
+}
+
 // ---------------------------------------------------------------- janelas
 
 const windows = new Set();
@@ -105,7 +153,7 @@ function saveWindowState(win) {
   writeJson(windowStateFile, { ...b, maximized });
 }
 
-function createWindow(filePath) {
+function createWindow(filePath, opts = {}) {
   const b = nextBounds();
   const iconPath = path.join(__dirname, 'app', 'icons', 'redator.ico');
   const win = new BrowserWindow({
@@ -126,7 +174,8 @@ function createWindow(filePath) {
     },
   });
 
-  win.docState = { filePath: filePath || null, dirty: false, allowClose: false };
+  win.docState = { filePath: filePath || null, dirty: false, allowClose: false, recover: opts.recover || null, crashes: 0 };
+  win.recoverId = null;
   windows.add(win);
 
   win.loadFile(path.join(__dirname, 'app', 'index.html'));
@@ -144,7 +193,14 @@ function createWindow(filePath) {
     }
   });
 
-  win.on('closed', () => { windows.delete(win); });
+  win.on('closed', () => {
+    windows.delete(win);
+    // fechou pelo caminho normal: o usuário salvou ou escolheu não salvar
+    const decided = !win.docState.dirty || win.docState.allowClose;
+    if (win.recoverId && decided && !win.keepRecovery) removeRecovery(win.recoverId);
+  });
+  // desligamento do Windows: a cópia fica para a próxima abertura
+  win.on('session-end', () => { win.keepRecovery = true; });
 
   win.on('maximize', () => win.webContents.send('app:window-state', { maximized: true }));
   win.on('unmaximize', () => win.webContents.send('app:window-state', { maximized: false }));
@@ -152,6 +208,16 @@ function createWindow(filePath) {
 
   const wc = win.webContents;
   wc.on('will-navigate', (e) => e.preventDefault());
+  wc.on('render-process-gone', (_e, details) => {
+    if (details.reason === 'clean-exit' || win.isDestroyed()) return;
+    console.warn('A janela parou de responder:', details.reason);
+    const st = win.docState;
+    st.dirty = false;
+    // se a mesma falha se repetir, deixa a janela fechar em vez de recarregar sem fim
+    if (++st.crashes > 2) { st.allowClose = true; win.keepRecovery = true; return; }
+    if (win.recoverId && fs.existsSync(recoverFiles(win.recoverId).meta)) st.recover = win.recoverId;
+    setTimeout(() => { if (!win.isDestroyed()) wc.reload(); }, 400);
+  });
   wc.setWindowOpenHandler(({ url }) => {
     if (/^(https?|mailto):/i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
@@ -220,6 +286,7 @@ if (!gotLock) {
       });
     }
     setTimeout(startSpellHelper, 2500);
+    leftovers = scanRecovery();
     const files = filesFromArgv(process.argv, process.cwd());
     if (files.length) files.forEach((f) => createWindow(f));
     else createWindow(null);
@@ -251,14 +318,71 @@ function configureSpellchecker() {
 
 ipcMain.handle('app:init', (event) => {
   const win = windowFor(event);
+  const recover = win ? win.docState.recover : null;
+  if (win) win.docState.recover = null;
+  // o que sobrou da sessão anterior é oferecido uma vez, na primeira janela
+  const recovered = leftovers.filter((e) => ![...windows].some((w) => w.recoverId === e.id));
+  leftovers = [];
   return {
     filePath: win ? win.docState.filePath : null,
+    recover,
+    recovered,
     recent: getRecent(),
     version: app.getVersion(),
     userName: os.userInfo().username,
     prefs: readJson(prefsFile, {}),
     platform: process.platform,
   };
+});
+
+ipcMain.handle('recover:save', async (event, data, meta) => {
+  const win = windowFor(event);
+  if (!win) return false;
+  if (!win.recoverId) win.recoverId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  const f = recoverFiles(win.recoverId);
+  try {
+    await fs.promises.mkdir(recoverDir, { recursive: true });
+    await writeAtomic(f.data, Buffer.from(data));
+    await writeAtomic(f.meta, JSON.stringify({ ...meta, time: Date.now() }));
+    return win.recoverId;
+  } catch (err) {
+    console.warn('Falha na AutoRecuperação', err.message);
+    return null;
+  }
+});
+
+ipcMain.on('recover:clear', (event) => {
+  const win = windowFor(event);
+  if (win && win.recoverId) removeRecovery(win.recoverId);
+});
+
+// a janela assume a cópia: as próximas gravações vão para ela e fechar normalmente a apaga
+ipcMain.handle('recover:take', async (event, id) => {
+  const win = windowFor(event);
+  if (!win || !RECOVER_ID.test(String(id))) return null;
+  if ([...windows].some((w) => w !== win && w.recoverId === id)) return null;
+  const f = recoverFiles(id);
+  try {
+    const meta = JSON.parse(await fs.promises.readFile(f.meta, 'utf8'));
+    const data = await fs.promises.readFile(f.data);
+    if (win.recoverId && win.recoverId !== id) removeRecovery(win.recoverId);
+    win.recoverId = id;
+    return { meta, data: new Uint8Array(data.buffer, data.byteOffset, data.byteLength) };
+  } catch {
+    return null;
+  }
+});
+
+ipcMain.handle('recover:open', (_e, id) => {
+  if (RECOVER_ID.test(String(id))) createWindow(null, { recover: id });
+  return true;
+});
+
+ipcMain.handle('recover:discard', (_e, ids) => {
+  for (const id of Array.isArray(ids) ? ids : []) {
+    if (![...windows].some((w) => w.recoverId === id)) removeRecovery(id);
+  }
+  return true;
 });
 
 ipcMain.handle('file:read', async (_event, p) => {

@@ -48,6 +48,10 @@ sistema, em português, no clique com o botão direito.
 **PDF e impressão.** Exporta PDF com as mesmas quebras de página da tela e imprime
 pela janela de impressão do Windows.
 
+**Nada se perde se o PC cair.** Enquanto há alterações não salvas, o Redator guarda
+uma cópia a cada minuto. Se o programa fechar de repente, na abertura seguinte ele
+oferece de volta tudo o que estava aberto, como a AutoRecuperação do Word.
+
 <table>
   <tr>
     <td width="50%"><img src="docs/imagens/markdown.png" alt="Nota do Obsidian com callouts"></td>
@@ -69,7 +73,7 @@ negrito, Ctrl+S sublinhado e Ctrl+B salvar.
 codificação, o mesmo fim de linha e as mesmas tabulações.
 
 **Leitor padrão.** O instalador registra o Redator no "Abrir com" do Windows e em
-Aplicativos padrão, para `.docx`, `.odt`, `.md`, `.rtf` e `.txt`. Como o Windows 11
+Aplicativos padrão, para `.docx`, `.doc`, `.odt`, `.md`, `.rtf` e `.txt`. Como o Windows 11
 não traz mais o WordPad, ele também serve para abrir os `.rtf` que sobraram.
 
 </td>
@@ -128,6 +132,8 @@ exemplo em `tests/fixtures`:
 - `.txt` em Windows-1252 com tabulações voltando igual;
 - `.rtf` no formato do Word com acentos, listas, tabela, imagem, link, nota de
   rodapé, cabeçalho e rodapé, e a ida e volta mantendo texto e estrutura;
+- recuperação automática devolvendo `.md` e `.rtf` com a edição, e a cópia
+  apagada ao salvar;
 - `.docx` gravado sem XML inválido e estável em ida e volta;
 - exportação para `.odt`, `.html`, `.txt`, `.md` e `.rtf`;
 - paginação e digitação num documento longo;
@@ -157,8 +163,9 @@ release `latest`.
 
 ## Onde ficam os dados
 
-Preferências, arquivos recentes, tamanho da janela e palavras adicionadas ao
-dicionário ficam em `%APPDATA%\Redator`. O desinstalador pergunta antes de apagar.
+Preferências, arquivos recentes, tamanho da janela, palavras adicionadas ao
+dicionário e as cópias da recuperação automática ficam em `%APPDATA%\Redator`.
+O desinstalador pergunta antes de apagar.
 
 ## Licença
 
