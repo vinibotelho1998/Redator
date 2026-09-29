@@ -96,6 +96,13 @@ export const ICONS = {
   focus16: s16('<path d="M1.5 5V1.5H5M11 1.5h3.5V5M14.5 11v3.5H11M5 14.5H1.5V11" fill="none" stroke="currentColor" stroke-width="1.2"/>'),
   settings16: s16('<circle cx="8" cy="8" r="2.3" fill="none" stroke="currentColor"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.2"/>'),
   word16: s16('<rect x="1" y="1" width="14" height="14" rx="2.5" fill="#185abd"/>' + txt(3.4, 12.3, 'R', 11, 'font-weight="700" fill="#fff"')),
+  // tipos de arquivo na lista de recentes
+  md16: s16(page16(txt(4.1, 12.6, 'M', 6.2, 'font-weight="700"') + '<path d="M10.2 8.6v3.6M8.9 11l1.3 1.4 1.3-1.4" fill="none" stroke="' + INK + '" stroke-width=".9"/>')),
+  sheet16: s16(page16('<rect x="5" y="7" width="6" height="5.5" fill="#e8f3ec" stroke="#217346" stroke-width=".8"/><path d="M5 9.7h6M8 7v5.5" stroke="#217346" stroke-width=".8"/>')),
+  mail16: s16('<rect x="1.5" y="3.5" width="13" height="9" rx="1" fill="#fff" stroke="' + BLUE + '"/><path d="M2 4.2l6 4.6 6-4.6" fill="none" stroke="' + BLUE + '"/>'),
+  book16: s16('<path d="M8 4.2C6.4 3 4 2.8 1.5 3.2v9.6c2.5-.4 4.9-.2 6.5 1 1.6-1.2 4-1.4 6.5-1V3.2C12 2.8 9.6 3 8 4.2z" fill="#fff" stroke="#7a4b9b"/><path d="M8 4.2v9.6" stroke="#7a4b9b"/>'),
+  web16: s16('<circle cx="8" cy="8" r="6.3" fill="#fff" stroke="#0f7b8a"/><ellipse cx="8" cy="8" rx="2.6" ry="6.3" fill="none" stroke="#0f7b8a" stroke-width=".8"/><path d="M1.9 6h12.2M1.9 10h12.2" stroke="#0f7b8a" stroke-width=".8"/>'),
+  code16: s16(page16('<path d="M6.3 7.6L4.8 9.6l1.5 2M9.7 7.6l1.5 2-1.5 2" fill="none" stroke="' + GRAY + '" stroke-width=".9"/>')),
   pdf16: s16('<path d="M3.5 1.5h6l3 3v10h-9z" fill="#fff" stroke="#b30b00"/><rect x="1.5" y="8" width="10" height="5" rx="1" fill="#b30b00"/>' + txt(2.3, 12.3, 'PDF', 4.3, 'font-weight="700" fill="#fff"')),
   ruler16: s16('<rect x="1.5" y="4.5" width="13" height="7" fill="#fff" stroke="currentColor"/><path d="M4 4.5v3M6.5 4.5v2M9 4.5v3M11.5 4.5v2" stroke="currentColor"/>'),
   navpane16: s16('<rect x="1.5" y="2.5" width="13" height="11" fill="#fff" stroke="currentColor"/><path d="M6 2.5v11" stroke="currentColor"/><path d="M2.5 5h2.5M2.5 7h2.5M2.5 9h2.5" stroke="currentColor" stroke-width=".8"/>'),

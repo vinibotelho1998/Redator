@@ -23,11 +23,16 @@ function when(ms) {
   return d.toLocaleDateString('pt-BR');
 }
 
+const EXT_ICON = {
+  docx: 'word16', docm: 'word16', dotx: 'word16', dotm: 'word16', doc: 'word16', dot: 'word16', rtf: 'word16',
+  pdf: 'pdf16', md: 'md16', markdown: 'md16', csv: 'sheet16', tsv: 'sheet16', eml: 'mail16', epub: 'book16',
+  html: 'web16', htm: 'web16', xhtml: 'web16', mht: 'web16', mhtml: 'web16',
+  json: 'code16', xml: 'code16', yaml: 'code16', yml: 'code16', ini: 'code16', sql: 'code16', js: 'code16', ts: 'code16', py: 'code16', ps1: 'code16', css: 'code16',
+};
+
 function fileIcon(name) {
   const ext = (name.split('.').pop() || '').toLowerCase();
-  if (ext === 'docx' || ext === 'doc' || ext === 'docm' || ext === 'dotx') return icon('word16');
-  if (ext === 'pdf') return icon('pdf16');
-  return icon('newdoc16');
+  return icon(EXT_ICON[ext] || 'newdoc16');
 }
 
 export class Backstage {
