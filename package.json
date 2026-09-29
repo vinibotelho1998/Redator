@@ -1,7 +1,7 @@
 {
   "name": "redator",
   "productName": "Redator",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Editor de documentos com a cara do Word: docx, md, odt, html, txt e PDF",
   "main": "main.js",
   "private": true,
