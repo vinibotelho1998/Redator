@@ -1,11 +1,11 @@
-# Remove o Redator instalado para o usuário atual e desfaz os registros.
+﻿# Remove o Redator instalado para o usuário atual e desfaz os registros.
 $dest = Join-Path $env:LOCALAPPDATA 'Programs\Redator'
 Get-Process Redator -ErrorAction SilentlyContinue | Stop-Process -Force
 Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
 Remove-Item (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Redator.lnk') -ErrorAction SilentlyContinue
 Remove-Item (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Redator.lnk') -ErrorAction SilentlyContinue
 $classes = 'HKCU:\Software\Classes'
-foreach ($ext in '.docx', '.docm', '.dotx', '.odt', '.md', '.markdown', '.txt', '.rtf', '.doc', '.pdf') {
+foreach ($ext in '.docx', '.docm', '.dotx', '.odt', '.md', '.markdown', '.txt', '.rtf', '.doc', '.pdf', '.dotm', '.ott', '.fodt', '.epub', '.mht', '.mhtml', '.eml', '.csv', '.tsv', '.log', '.json', '.xml', '.yaml', '.yml', '.ini') {
   Remove-Item -Recurse -Force "$classes\Redator$ext" -ErrorAction SilentlyContinue
   Remove-ItemProperty -Path "$classes\$ext\OpenWithProgids" -Name "Redator$ext" -ErrorAction SilentlyContinue
 }

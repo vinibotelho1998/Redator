@@ -1,4 +1,4 @@
-# Instala o Redator para o usuário atual, sem precisar de administrador.
+﻿# Instala o Redator para o usuário atual, sem precisar de administrador.
 # Copia o programa, cria atalhos e registra os tipos de arquivo no "Abrir com".
 $ErrorActionPreference = 'Stop'
 $src = Join-Path $PSScriptRoot '..\out\Redator-win32-x64'
@@ -39,6 +39,21 @@ $types = [ordered]@{
   '.rtf' = 'Documento Rich Text'
   '.doc' = 'Documento do Word 97-2003'
   '.pdf' = 'Documento PDF'
+  '.dotm' = 'Modelo do Word Habilitado para Macro'
+  '.ott' = 'Modelo OpenDocument'
+  '.fodt' = 'Texto OpenDocument plano'
+  '.epub' = 'Livro digital EPUB'
+  '.mht' = 'Página da Web em arquivo único'
+  '.mhtml' = 'Página da Web em arquivo único'
+  '.eml' = 'Mensagem de e-mail'
+  '.csv' = 'Arquivo CSV'
+  '.tsv' = 'Valores separados por tabulação'
+  '.log' = 'Arquivo de log'
+  '.json' = 'Arquivo JSON'
+  '.xml' = 'Documento XML'
+  '.yaml' = 'Arquivo YAML'
+  '.yml' = 'Arquivo YAML'
+  '.ini' = 'Arquivo de configuração'
 }
 function Set-Default($path, $value) {
   if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }

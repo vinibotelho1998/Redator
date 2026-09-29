@@ -116,6 +116,66 @@ Root: HKA; Subkey: "Software\Classes\Redator.pdf"; ValueType: string; ValueName:
 Root: HKA; Subkey: "Software\Classes\Redator.pdf\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associar
 Root: HKA; Subkey: "Software\Classes\Redator.pdf\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associar
 Root: HKA; Subkey: "Software\Classes\.pdf\OpenWithProgids"; ValueType: string; ValueName: "Redator.pdf"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.dotm"; ValueType: string; ValueName: ""; ValueData: "Modelo do Word Habilitado para Macro"; Flags: uninsdeletekey; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.dotm\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.dotm\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\.dotm\OpenWithProgids"; ValueType: string; ValueName: "Redator.dotm"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.ott"; ValueType: string; ValueName: ""; ValueData: "Modelo OpenDocument"; Flags: uninsdeletekey; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.ott\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.ott\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\.ott\OpenWithProgids"; ValueType: string; ValueName: "Redator.ott"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.fodt"; ValueType: string; ValueName: ""; ValueData: "Texto OpenDocument plano"; Flags: uninsdeletekey; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.fodt\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.fodt\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\.fodt\OpenWithProgids"; ValueType: string; ValueName: "Redator.fodt"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.epub"; ValueType: string; ValueName: ""; ValueData: "Livro digital EPUB"; Flags: uninsdeletekey; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.epub\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.epub\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\.epub\OpenWithProgids"; ValueType: string; ValueName: "Redator.epub"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.mht"; ValueType: string; ValueName: ""; ValueData: "Página da Web em arquivo único"; Flags: uninsdeletekey; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.mht\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.mht\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\.mht\OpenWithProgids"; ValueType: string; ValueName: "Redator.mht"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.mhtml"; ValueType: string; ValueName: ""; ValueData: "Página da Web em arquivo único"; Flags: uninsdeletekey; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.mhtml\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.mhtml\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\.mhtml\OpenWithProgids"; ValueType: string; ValueName: "Redator.mhtml"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.eml"; ValueType: string; ValueName: ""; ValueData: "Mensagem de e-mail"; Flags: uninsdeletekey; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.eml\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.eml\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\.eml\OpenWithProgids"; ValueType: string; ValueName: "Redator.eml"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.csv"; ValueType: string; ValueName: ""; ValueData: "Arquivo CSV"; Flags: uninsdeletekey; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.csv\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.csv\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\.csv\OpenWithProgids"; ValueType: string; ValueName: "Redator.csv"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.tsv"; ValueType: string; ValueName: ""; ValueData: "Valores separados por tabulação"; Flags: uninsdeletekey; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.tsv\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.tsv\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\.tsv\OpenWithProgids"; ValueType: string; ValueName: "Redator.tsv"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.log"; ValueType: string; ValueName: ""; ValueData: "Arquivo de log"; Flags: uninsdeletekey; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.log\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.log\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\.log\OpenWithProgids"; ValueType: string; ValueName: "Redator.log"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.json"; ValueType: string; ValueName: ""; ValueData: "Arquivo JSON"; Flags: uninsdeletekey; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.json\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.json\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\.json\OpenWithProgids"; ValueType: string; ValueName: "Redator.json"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.xml"; ValueType: string; ValueName: ""; ValueData: "Documento XML"; Flags: uninsdeletekey; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.xml\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.xml\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\.xml\OpenWithProgids"; ValueType: string; ValueName: "Redator.xml"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.yaml"; ValueType: string; ValueName: ""; ValueData: "Arquivo YAML"; Flags: uninsdeletekey; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.yaml\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.yaml\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\.yaml\OpenWithProgids"; ValueType: string; ValueName: "Redator.yaml"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.yml"; ValueType: string; ValueName: ""; ValueData: "Arquivo YAML"; Flags: uninsdeletekey; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.yml\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.yml\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\.yml\OpenWithProgids"; ValueType: string; ValueName: "Redator.yml"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.ini"; ValueType: string; ValueName: ""; ValueData: "Arquivo de configuração"; Flags: uninsdeletekey; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.ini\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\Redator.ini\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associar
+Root: HKA; Subkey: "Software\Classes\.ini\OpenWithProgids"; ValueType: string; ValueName: "Redator.ini"; ValueData: ""; Flags: uninsdeletevalue; Tasks: associar
 Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "{#MyAppName}"; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
 Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".docx"; ValueData: ""
@@ -128,6 +188,21 @@ Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes
 Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".rtf"; ValueData: ""
 Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".doc"; ValueData: ""
 Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".pdf"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".dotm"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".ott"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".fodt"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".epub"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".mht"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".mhtml"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".eml"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".csv"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".tsv"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".log"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".json"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".xml"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".yaml"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".yml"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedTypes"; ValueType: string; ValueName: ".ini"; ValueData: ""
 Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "{#MyAppName}"; Flags: uninsdeletekey; Tasks: associar
 Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "Editor de documentos com a cara do Word: docx, doc, pdf, odt, rtf, md e txt"; Tasks: associar
 Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities"; ValueType: string; ValueName: "ApplicationIcon"; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associar
@@ -141,6 +216,21 @@ Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueT
 Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".rtf"; ValueData: "Redator.rtf"; Tasks: associar
 Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".doc"; ValueData: "Redator.doc"; Tasks: associar
 Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".pdf"; ValueData: "Redator.pdf"; Tasks: associar
+Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".dotm"; ValueData: "Redator.dotm"; Tasks: associar
+Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".ott"; ValueData: "Redator.ott"; Tasks: associar
+Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".fodt"; ValueData: "Redator.fodt"; Tasks: associar
+Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".epub"; ValueData: "Redator.epub"; Tasks: associar
+Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".mht"; ValueData: "Redator.mht"; Tasks: associar
+Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".mhtml"; ValueData: "Redator.mhtml"; Tasks: associar
+Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".eml"; ValueData: "Redator.eml"; Tasks: associar
+Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".csv"; ValueData: "Redator.csv"; Tasks: associar
+Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".tsv"; ValueData: "Redator.tsv"; Tasks: associar
+Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".log"; ValueData: "Redator.log"; Tasks: associar
+Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".json"; ValueData: "Redator.json"; Tasks: associar
+Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".xml"; ValueData: "Redator.xml"; Tasks: associar
+Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".yaml"; ValueData: "Redator.yaml"; Tasks: associar
+Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".yml"; ValueData: "Redator.yml"; Tasks: associar
+Root: HKA; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".ini"; ValueData: "Redator.ini"; Tasks: associar
 Root: HKA; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "{#MyAppName}"; ValueData: "Software\{#MyAppName}\Capabilities"; Flags: uninsdeletevalue; Tasks: associar
 
 [Run]

@@ -9,6 +9,7 @@ const FORMATS = [
   { ext: 'html', label: 'Página da Web (*.html)', icon: 'webLayout16' },
   { ext: 'txt', label: 'Texto sem Formatação (*.txt)', icon: 'newdoc16' },
   { ext: 'rtf', label: 'Rich Text Format (*.rtf)', icon: 'newdoc16' },
+  { ext: 'csv', label: 'CSV, a primeira tabela (*.csv)', icon: 'newdoc16' },
   { ext: 'pdf', label: 'PDF (*.pdf)', icon: 'pdf16' },
 ];
 
