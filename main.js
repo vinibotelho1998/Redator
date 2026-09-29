@@ -687,6 +687,9 @@ function attachTestHarness(win) {
     const arg = rest.join(':');
     try {
       if (cmd === 'SHOT') {
+        // janela escondida não se redesenha sozinha: pede um quadro novo antes de fotografar
+        wc.invalidate();
+        await wc.executeJavaScript('new Promise((r) => { requestAnimationFrame(() => requestAnimationFrame(r)); setTimeout(r, 400); })', true).catch(() => {});
         const img = await wc.capturePage(undefined, { stayHidden: true });
         fs.writeFileSync(path.join(outDir, arg), img.toPNG());
         console.log('TEST shot', arg);
