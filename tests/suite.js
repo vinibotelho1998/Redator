@@ -242,6 +242,10 @@
       const d = rt.firstDiff(rt.normalize(r1.doc.toJSON()), rt.normalize(r2.doc.toJSON()));
       expect('docx gerado sem XML inválido', bad1.length === 0, bad1);
       expect('docx estável em ida e volta', !d, d);
+      const b3 = await rt.writeDocx(app.model, app.view.state.doc, { author: 'Teste' });
+      const media = async (b) => Object.keys((await rt.JSZip.loadAsync(b)).files).filter((f) => f.startsWith('word/media/')).length;
+      const m1 = await media(b1), m3 = await media(b3);
+      expect('gravar de novo não duplica imagens de link', m1 >= 1 && m3 === m1, { primeira: m1, segunda: m3 });
       app.pristine = true; app.dirty = false; app.filePath = null;
       await app.loadBytes(b2, FIX + 'gerado.docx', false);
       app.layout.runNow(8);

@@ -96,6 +96,12 @@ class Writer {
     let bytes = null;
     let type = 'image/png';
     const src = attrs.src || '';
+    // imagem de link ou colada já incorporada numa gravação anterior deste documento
+    const known = src && model.srcMedia ? model.srcMedia.get(src) : null;
+    if (known && this.zip.file(known) && model.media.has(known)) {
+      this.ensureDefault(extOf(known), model.media.get(known).type);
+      return known;
+    }
     try {
       if (src.startsWith('data:')) {
         const m = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(src);
@@ -123,6 +129,8 @@ class Writer {
     do { this.mediaCounter++; path = 'word/media/redator' + this.mediaCounter + '.' + ext; } while (this.zip.file(path) || model.media.has(path));
     this.zip.file(path, bytes);
     model.media.set(path, { url: src.startsWith('blob:') ? src : URL.createObjectURL(new Blob([bytes], { type })), bytes, ext, type });
+    if (!model.srcMedia) model.srcMedia = new Map();
+    model.srcMedia.set(src, path);
     this.ensureDefault(ext, type);
     return path;
   }
