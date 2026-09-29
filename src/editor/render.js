@@ -163,6 +163,13 @@ export function shdCss(a) {
   return c ? 'background-color:' + c : '';
 }
 
+// Sombreamento de parágrafo pinta só as linhas: o espaço antes e depois fica de
+// fora, como no Word. Com borda, o fundo vai até a borda.
+function paraShdCss(shd, bordered) {
+  const css = shdCss(shd);
+  return css && !bordered ? css + ';background-clip:content-box' : css;
+}
+
 export function isDarkShd(shd) {
   const c = shdColor(shd);
   return !!c && isDark(c);
@@ -279,7 +286,7 @@ export function paraCss(pPr, effSpacing) {
     out.push(spacingCss({ ...(effSpacing || {}), ...(pPr.spacing || {}) }, true));
     out.push('padding-top:0;padding-bottom:0');
   } else if (pPr.spacing) out.push(spacingCss(pPr.spacing));
-  if (pPr.shd) out.push(shdCss(pPr.shd));
+  if (pPr.shd) out.push(paraShdCss(pPr.shd, bordered));
   if (pPr.pBdr) out.push(pBdrCss(pPr.pBdr));
   return out.filter(Boolean).join(';');
 }
@@ -400,7 +407,7 @@ export function paraDirectCss(a) {
     out.push(spacingCss(eff, true));
     out.push('padding-top:0;padding-bottom:0');
   } else if (a.spacing) out.push(spacingCss(a.spacing, styleBorder));
-  if (a.shd) out.push(shdCss(a.shd));
+  if (a.shd) out.push(paraShdCss(a.shd, directBorder || styleBorder));
   if (a.pBdr) out.push(pBdrCss(a.pBdr));
   if (a.markRPr) {
     const sz = a.markRPr.find((m) => m.type === 'sz');
