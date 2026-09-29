@@ -165,6 +165,24 @@
       app.pristine = true; app.dirty = false; app.filePath = null; app.importPath = null;
     }
 
+    // 3c. CSV vira tabela e volta igual; editar uma célula muda só a linha dela
+    {
+      const { p, bytes } = await open('planilha.csv');
+      const table = app.view.state.doc.firstChild;
+      const cell = (r, c) => table.child(r).child(c).textContent;
+      expect('csv: abre como tabela', app.format === 'csv' && table.type.name === 'table' && table.childCount === 6 && table.firstChild.childCount === 4, { format: app.format, tipo: table.type.name, linhas: table.childCount });
+      expect('csv: aspas, separador no texto e quebra de linha na célula', cell(1, 3) === 'Capa dura; 200 folhas' && cell(3, 0) === 'Mochila "Aventura"' && cell(3, 3).includes('segunda-feira') && cell(4, 3) === '', [cell(1, 3), cell(3, 0), cell(3, 3)]);
+      const { data } = await app.serialize('csv', p);
+      expect('csv sem edição igual ao original', sameBytes(data, bytes), new TextDecoder().decode(data).slice(0, 200));
+      let at = null;
+      app.view.state.doc.descendants((n, pos) => { if (at == null && n.type.name === 'table_cell' && n.textContent === '25') at = pos; return at == null; });
+      app.view.dispatch(app.view.state.tr.insertText('0', at + 4));
+      const text = new TextDecoder().decode((await app.serialize('csv', p)).data);
+      const d = diffLines(new TextDecoder().decode(bytes), text);
+      expect('csv editado muda só a linha editada', d.removed.length === 1 && d.added.length === 1 && d.added[0] === 'Caneta azul;250;2,30;\r', d);
+      app.pristine = true; app.dirty = false; app.filePath = null;
+    }
+
     // 4a. Página salva da web: só o conteúdo
     {
       await open('pagina-salva.html');

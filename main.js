@@ -12,7 +12,7 @@ const TEXT_EXTS = ['txt', 'text', 'log', 'json', 'jsonc', 'json5', 'xml', 'xsd',
   'sql', 'ps1', 'psm1', 'psd1', 'bat', 'cmd', 'sh', 'bash', 'zsh', 'py', 'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'vue', 'css', 'scss', 'sass', 'less',
   'java', 'kt', 'kts', 'groovy', 'gradle', 'c', 'h', 'cpp', 'cc', 'hpp', 'cs', 'go', 'rs', 'php', 'rb', 'swift', 'vb', 'vbs', 'lua', 'r', 'pl', 'dart', 'scala',
   'srt', 'vtt', 'sub', 'rst', 'adoc', 'asciidoc', 'org', 'tex', 'bib', 'diff', 'patch', 'nfo', 'reg', 'tsv', 'gitignore', 'gitattributes', 'editorconfig', 'dockerfile'];
-const SUPPORTED = ['.docx', '.docm', '.dotx', '.dotm', '.doc', '.dot', '.md', '.markdown', '.csv', '.html', '.htm', '.xhtml', '.odt', '.rtf', '.pdf', ...TEXT_EXTS.map((e) => '.' + e)];
+const SUPPORTED = ['.docx', '.docm', '.dotx', '.dotm', '.doc', '.dot', '.md', '.markdown', '.csv', '.tsv', '.html', '.htm', '.xhtml', '.odt', '.rtf', '.pdf', ...TEXT_EXTS.map((e) => '.' + e)];
 
 app.setName(APP_NAME);
 if (process.platform === 'win32') app.setAppUserModelId('br.redator.app');

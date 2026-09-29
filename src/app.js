@@ -24,6 +24,7 @@ import { readOdt, writeOdt } from './formats/odt.js';
 import { readRtf, writeRtf } from './formats/rtf.js';
 import { readDoc } from './formats/doc.js';
 import { readPdf } from './formats/pdf.js';
+import { readCsv, writeCsv } from './formats/csv.js';
 import { loadImageSize, fitSize, contentWidthPx, dirName, encodeText } from './formats/common.js';
 import { PAPER_SIZES, MARGIN_PRESETS } from './model.js';
 import { h } from './ui/dom.js';
@@ -46,11 +47,12 @@ const FORMAT_INFO = {
   md: { label: 'Markdown', filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }] },
   html: { label: 'Página da Web', filters: [{ name: 'Página da Web', extensions: ['html', 'htm'] }] },
   txt: { label: 'Texto sem Formatação', filters: [{ name: 'Texto sem Formatação', extensions: ['txt'] }] },
+  csv: { label: 'CSV (separado por vírgulas)', filters: [{ name: 'CSV', extensions: ['csv'] }] },
   rtf: { label: 'Rich Text Format', filters: [{ name: 'Rich Text Format', extensions: ['rtf'] }] },
   pdf: { label: 'PDF', filters: [{ name: 'PDF', extensions: ['pdf'] }] },
 };
 
-const EXT_FORMAT = { docx: 'docx', docm: 'docx', dotx: 'docx', dotm: 'docx', odt: 'odt', md: 'md', markdown: 'md', txt: 'txt', text: 'txt', log: 'txt', csv: 'txt', html: 'html', htm: 'html', xhtml: 'html', rtf: 'rtf', doc: 'doc', dot: 'doc', pdf: 'pdf' };
+const EXT_FORMAT = { docx: 'docx', docm: 'docx', dotx: 'docx', dotm: 'docx', odt: 'odt', md: 'md', markdown: 'md', txt: 'txt', text: 'txt', log: 'txt', csv: 'csv', tsv: 'csv', html: 'html', htm: 'html', xhtml: 'html', rtf: 'rtf', doc: 'doc', dot: 'doc', pdf: 'pdf' };
 
 // arquivos de texto e de código abrem como texto puro, sem mexer nos bytes
 export const TEXT_EXTS = ['txt', 'text', 'log', 'json', 'jsonc', 'json5', 'xml', 'xsd', 'xsl', 'svg', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf', 'config', 'properties', 'env',
@@ -368,9 +370,14 @@ class App {
 
   async loadBytes(bytes, path, readonly) {
     const ext = extOf(path);
-    const format = EXT_FORMAT[ext];
+    let format = EXT_FORMAT[ext];
     let res;
-    if (format === 'docx') res = await readDocx(bytes);
+    if (format === 'csv') {
+      res = await readCsv(bytes, path);
+      if (!res) format = 'txt';
+    }
+    if (res) { /* já lido como tabela */ }
+    else if (format === 'docx') res = await readDocx(bytes);
     else if (format === 'md') res = await readMarkdown(bytes, path, { host: this.host });
     else if (format === 'html') res = await readHtml(bytes, path);
     else if (format === 'txt') {
@@ -515,6 +522,9 @@ class App {
         // texto puro é rápido de gravar mesmo num log enorme
         data = writeText(doc, this.model);
         kind = 'txt';
+      } else if (this.format === 'csv') {
+        data = writeCsv(doc, this.model);
+        if (data) kind = 'csv';
       }
       if (!data) data = await writeDocx(this.model, doc, { author: this.prefs.author || this.userName || '' });
       const meta = { name: this.docName, path: this.filePath || this.importPath || null, format: this.format, kind, text: textInfo };
@@ -534,7 +544,8 @@ class App {
     const { meta, data } = r;
     const res = meta.kind === 'md' ? await readMarkdown(data, meta.path || '', { host: this.host })
       : meta.kind === 'txt' ? await readText(data, meta.path || '')
-        : await readDocx(data);
+        : meta.kind === 'csv' ? (await readCsv(data, meta.path || '')) || (await readText(data, meta.path || ''))
+          : await readDocx(data);
     if (meta.kind === 'docx' && meta.text && ['md', 'txt'].includes(meta.format)) res.model.extra.text = meta.text;
     this.setDocument(res.model, res.doc, { path: null, format: meta.format || 'docx', name: meta.name || 'Documento1' });
     // salvar pede confirmação do local, que já vem com o arquivo original
@@ -594,9 +605,11 @@ class App {
   }
 
   async confirmLossy(fmt) {
-    if (fmt !== 'txt' && fmt !== 'md') return true;
+    if (fmt !== 'txt' && fmt !== 'md' && fmt !== 'csv') return true;
     if (this.format === fmt || this.warnedLossy.has(fmt)) return true;
-    const text = fmt === 'txt'
+    const text = fmt === 'csv'
+      ? 'Ao salvar como CSV, só a primeira tabela do documento é salva, sem formatação.\nDeseja continuar?'
+      : fmt === 'txt'
       ? 'Ao salvar como Texto sem Formatação, toda a formatação, imagens e objetos serão perdidos.\nDeseja continuar?'
       : 'Ao salvar como Markdown, títulos, listas, tabelas, links e imagens são mantidos, mas cores, fontes e layout de página são perdidos.\nDeseja continuar?';
     const r = await D.messageBox('Redator', text, [{ label: 'Salvar', primary: true, value: 'ok' }, { label: 'Cancelar', value: 'cancel' }], { cancelValue: 'cancel', icon: 'warn' });
@@ -618,6 +631,11 @@ class App {
       }
       case 'html': return { data: writeHtml(doc, this.model, { title: stripExt(baseName(path)) }) };
       case 'txt': return { data: writeText(doc, this.model) };
+      case 'csv': {
+        const data = writeCsv(doc, this.model);
+        if (!data) throw new Error('Para salvar como CSV, o documento precisa ter uma tabela.');
+        return { data };
+      }
       case 'odt': return { data: await writeOdt(doc, this.model) };
       case 'rtf': return { data: await writeRtf(doc, this.model) };
       default: throw new Error('Formato não suportado: ' + fmt);
