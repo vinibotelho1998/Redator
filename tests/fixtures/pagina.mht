@@ -1,0 +1,26 @@
+From: <Salvo pelo Redator>
+Subject: Pagina salva
+MIME-Version: 1.0
+Content-Type: multipart/related; type="text/html"; boundary="----Fronteira123"
+
+------Fronteira123
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+Content-Location: https://example.com/noticias/pagina.html
+
+<!DOCTYPE html><html><head><meta charset=3D"utf-8"><title>P=C3=A1gina salva=
+</title></head><body><h1>Not=C3=ADcia arquivada</h1><p>Texto com acentua=C3=
+=A7=C3=A3o: a=C3=A7=C3=A3o, p=C3=A3o e voc=C3=AA.</p><p><img src=3D"imagens=
+/figura.png" alt=3D"Figura"></p><button>Compartilhar</button></body></html>
+------Fronteira123
+Content-Type: image/png
+Content-Transfer-Encoding: base64
+Content-Location: https://example.com/noticias/imagens/figura.png
+
+iVBORw0KGgoAAAANSUhEUgAAAHgAAAA8CAYAAACtrX6oAAAAAXNSR0IArs4c6QAAAARnQU1BAACx
+jwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACnSURBVHhe7dExEQAgEMCw94NFXCIIdiTkOmTp
+2ln73LjmD7E0GNdgXINxDcY1GNdgXINxDcY1GNdgXINxDcY1GNdgXINxDcY1GNdgXINxDcY1GNdg
+XINxDcY1GNdgXINxDcY1GNdgXINxDcY1GNdgXINxDcY1GNdgXINxDcY1GNdgXINxDcY1GNdgXINx
+DcY1GNdgXINxDcY1GNdgXINxDcY1GNdg3AOJ9o8swX3A1gAAAABJRU5ErkJggg==
+
+------Fronteira123--

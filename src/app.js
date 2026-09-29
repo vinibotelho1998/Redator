@@ -25,6 +25,8 @@ import { readRtf, writeRtf } from './formats/rtf.js';
 import { readDoc } from './formats/doc.js';
 import { readPdf } from './formats/pdf.js';
 import { readCsv, writeCsv } from './formats/csv.js';
+import { readEpub } from './formats/epub.js';
+import { readMht, readEml } from './formats/mime.js';
 import { loadImageSize, fitSize, contentWidthPx, dirName, encodeText } from './formats/common.js';
 import { PAPER_SIZES, MARGIN_PRESETS } from './model.js';
 import { h } from './ui/dom.js';
@@ -52,7 +54,7 @@ const FORMAT_INFO = {
   pdf: { label: 'PDF', filters: [{ name: 'PDF', extensions: ['pdf'] }] },
 };
 
-const EXT_FORMAT = { docx: 'docx', docm: 'docx', dotx: 'docx', dotm: 'docx', odt: 'odt', md: 'md', markdown: 'md', txt: 'txt', text: 'txt', log: 'txt', csv: 'csv', tsv: 'csv', html: 'html', htm: 'html', xhtml: 'html', rtf: 'rtf', doc: 'doc', dot: 'doc', pdf: 'pdf' };
+const EXT_FORMAT = { docx: 'docx', docm: 'docx', dotx: 'docx', dotm: 'docx', odt: 'odt', ott: 'odt', fodt: 'fodt', epub: 'epub', mht: 'mht', mhtml: 'mht', eml: 'eml', md: 'md', markdown: 'md', txt: 'txt', text: 'txt', log: 'txt', csv: 'csv', tsv: 'csv', html: 'html', htm: 'html', xhtml: 'html', rtf: 'rtf', doc: 'doc', dot: 'doc', pdf: 'pdf' };
 
 // arquivos de texto e de código abrem como texto puro, sem mexer nos bytes
 export const TEXT_EXTS = ['txt', 'text', 'log', 'json', 'jsonc', 'json5', 'xml', 'xsd', 'xsl', 'svg', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf', 'config', 'properties', 'env',
@@ -84,6 +86,16 @@ function looksBinary(bytes) {
   for (let i = 0; i < n; i++) if (bytes[i] === 0) zeros++;
   return zeros > n * 0.01;
 }
+
+// lidos e convertidos: em que formato salvam e o aviso na barra de título
+const COMPAT = {
+  doc: { format: 'docx', label: 'Modo de compatibilidade' },
+  pdf: { format: 'docx', label: 'Convertido de PDF' },
+  epub: { format: 'docx', label: 'Convertido de EPUB' },
+  mht: { format: 'docx', label: 'Convertido de página da Web' },
+  eml: { format: 'docx', label: 'Mensagem de e-mail' },
+  fodt: { format: 'odt', label: 'Convertido de OpenDocument plano' },
+};
 
 function isPdf(bytes) {
   return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
@@ -388,6 +400,10 @@ class App {
     else if (format === 'rtf') res = await readRtf(bytes);
     else if (format === 'doc') res = await readDoc(bytes);
     else if (format === 'pdf') res = await this.readPdfBytes(bytes, path);
+    else if (format === 'epub') res = await readEpub(bytes);
+    else if (format === 'mht') res = await readMht(bytes);
+    else if (format === 'eml') res = await readEml(bytes);
+    else if (format === 'fodt') res = await readOdt(bytes);
     else {
       // tenta descobrir pelo conteúdo
       if (bytes[0] === 0x50 && bytes[1] === 0x4b) res = await readDocx(bytes);
@@ -395,10 +411,10 @@ class App {
       else if (isPdf(bytes)) res = await this.readPdfBytes(bytes, path);
       else res = await readText(bytes, path);
     }
-    // .doc antigo e PDF abrem convertidos: salvar grava um .docx novo ao lado
-    const kind = format === 'doc' || format === 'pdf' ? format : !format && bytes[0] === 0xD0 && bytes[1] === 0xCF ? 'doc' : !format && isPdf(bytes) ? 'pdf' : null;
+    // formatos que o Redator lê mas não grava abrem convertidos: salvar grava um arquivo novo ao lado
+    const kind = COMPAT[format] ? format : !format && bytes[0] === 0xD0 && bytes[1] === 0xCF ? 'doc' : !format && isPdf(bytes) ? 'pdf' : null;
     const compat = !!kind;
-    this.setDocument(res.model, res.doc, { path: compat ? null : path, format: compat ? 'docx' : format || 'txt', name: baseName(path) });
+    this.setDocument(res.model, res.doc, { path: compat ? null : path, format: compat ? COMPAT[kind].format : format || 'txt', name: baseName(path) });
     if (compat) { this.importPath = path; this.importKind = kind; this.pristine = false; this.updateTitle(); }
     this.readOnly = !!readonly;
     if (readonly) this.setInfo('Somente leitura');
@@ -478,7 +494,7 @@ class App {
   updateTitle() {
     const name = this.docName;
     this.titleText.textContent = name + ' - Redator';
-    this.titleState.textContent = this.recovered ? '• Recuperado' : this.dirty ? '• Não salvo' : this.filePath ? '• Salvo neste PC' : this.importPath ? (this.importKind === 'pdf' ? '• Convertido de PDF' : '• Modo de compatibilidade') : '';
+    this.titleState.textContent = this.recovered ? '• Recuperado' : this.dirty ? '• Não salvo' : this.filePath ? '• Salvo neste PC' : this.importPath ? '• ' + ((COMPAT[this.importKind] || {}).label || 'Modo de compatibilidade') : '';
     this.host.setDocState({ title: (this.dirty ? '* ' : '') + name + ' - Redator', dirty: this.dirty, filePath: this.filePath || this.importPath || null });
   }
 
@@ -636,7 +652,7 @@ class App {
         if (!data) throw new Error('Para salvar como CSV, o documento precisa ter uma tabela.');
         return { data };
       }
-      case 'odt': return { data: await writeOdt(doc, this.model) };
+      case 'odt': return { data: await writeOdt(doc, this.model, { template: extOf(path) === 'ott' }) };
       case 'rtf': return { data: await writeRtf(doc, this.model) };
       default: throw new Error('Formato não suportado: ' + fmt);
     }

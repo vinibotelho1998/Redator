@@ -1,0 +1,46 @@
+From: =?UTF-8?Q?Jo=C3=A3o_Silva?= <joao@example.com>
+To: Maria <maria@example.com>
+Date: Tue, 29 Sep 2026 10:30:00 -0300
+Subject: =?UTF-8?B?UmVsYXTDs3JpbyBkZSByZXVuacOjbyDinJQ=?=
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mix"
+
+--mix
+Content-Type: multipart/related; boundary="rel"
+
+--rel
+Content-Type: multipart/alternative; boundary="alt"
+
+--alt
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: base64
+
+T2zDoSwNCnNlZ3VlIG8gcmVzdW1vIGRhIHJldW5pw6NvLg0K
+
+--alt
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<html><body><p>Ol=C3=A1,</p><p>segue o <b>resumo</b> da reuni=C3=A3o.</p><p=
+><img src=3D"cid:grafico@redator"></p></body></html>
+--alt--
+--rel
+Content-Type: image/png
+Content-ID: <grafico@redator>
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAHgAAAA8CAYAAACtrX6oAAAAAXNSR0IArs4c6QAAAARnQU1BAACx
+jwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACnSURBVHhe7dExEQAgEMCw94NFXCIIdiTkOmTp
+2ln73LjmD7E0GNdgXINxDcY1GNdgXINxDcY1GNdgXINxDcY1GNdgXINxDcY1GNdgXINxDcY1GNdg
+XINxDcY1GNdgXINxDcY1GNdgXINxDcY1GNdgXINxDcY1GNdgXINxDcY1GNdgXINxDcY1GNdgXINx
+DcY1GNdgXINxDcY1GNdgXINxDcY1GNdg3AOJ9o8swX3A1gAAAABJRU5ErkJggg==
+
+--rel--
+--mix
+Content-Type: text/plain; name="notas.txt"
+Content-Disposition: attachment; filename="notas.txt"
+Content-Transfer-Encoding: base64
+
+Y29udGXDumRvIGRvIGFuZXhv
+
+--mix--

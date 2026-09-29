@@ -480,7 +480,34 @@ class OdtReader {
   }
 }
 
+// OpenDocument plano (.fodt): um XML só, com as imagens dentro em base64.
+// Vira um pacote comum na memória para seguir pela mesma leitura.
+async function flatToZip(bytes) {
+  const doc = parseXml(new TextDecoder('utf-8').decode(bytes).replace(/^\uFEFF/, ''));
+  const zip = new JSZip();
+  let n = 0;
+  for (const img of Array.from(doc.getElementsByTagNameNS(O.draw, 'image'))) {
+    const bin = Array.from(img.children).find((c) => c.localName === 'binary-data');
+    if (!bin) continue;
+    let data;
+    try { data = Uint8Array.from(atob(bin.textContent.replace(/\s+/g, '')), (c) => c.charCodeAt(0)); } catch { continue; }
+    const ext = data[0] === 0x89 ? 'png' : data[0] === 0xFF ? 'jpg' : data[0] === 0x47 ? 'gif' : data[0] === 0x3C ? 'svg' : 'png';
+    const path = 'Pictures/plano' + (++n) + '.' + ext;
+    zip.file(path, data);
+    img.removeChild(bin);
+    img.setAttributeNS(O.xlink, 'xlink:href', path);
+  }
+  const xml = new XMLSerializer().serializeToString(doc);
+  zip.file('content.xml', xml);
+  zip.file('styles.xml', xml);
+  zip.file('meta.xml', xml);
+  return zip.generateAsync({ type: 'uint8array' });
+}
+
 export async function readOdt(bytes) {
+  // começa com "<": é o formato plano
+  const start = bytes[0] === 0xEF ? 3 : 0;
+  if (bytes[start] === 0x3C) bytes = await flatToZip(bytes);
   const zip = await JSZip.loadAsync(bytes);
   const contentFile = zip.file('content.xml');
   if (!contentFile) throw new Error('O arquivo não parece ser um documento OpenDocument.');
@@ -869,7 +896,7 @@ class OdtWriter {
   }
 }
 
-export async function writeOdt(doc, model) {
+export async function writeOdt(doc, model, opts = {}) {
   const prev = R.model;
   R.model = model;
   try {
@@ -902,8 +929,10 @@ export async function writeOdt(doc, model) {
     const meta = '<?xml version="1.0" encoding="UTF-8"?>\n<office:document-meta ' + ns + '><office:meta><meta:generator>Redator</meta:generator>'
       + (model.properties.title ? '<dc:title>' + esc(model.properties.title) + '</dc:title>' : '') + '<dc:date>' + now + '</dc:date></office:meta></office:document-meta>';
     const zip = new JSZip();
-    zip.file('mimetype', 'application/vnd.oasis.opendocument.text', { compression: 'STORE' });
-    let manifest = '<?xml version="1.0" encoding="UTF-8"?>\n<manifest:manifest xmlns:manifest="' + O.manifest + '" manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:version="1.3" manifest:media-type="application/vnd.oasis.opendocument.text"/>'
+    // modelo (.ott) grava com o tipo de modelo, para continuar abrindo como modelo
+    const mime = opts.template ? 'application/vnd.oasis.opendocument.text-template' : 'application/vnd.oasis.opendocument.text';
+    zip.file('mimetype', mime, { compression: 'STORE' });
+    let manifest = '<?xml version="1.0" encoding="UTF-8"?>\n<manifest:manifest xmlns:manifest="' + O.manifest + '" manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:version="1.3" manifest:media-type="' + mime + '"/>'
       + '<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>';
     for (const p of w.pics) { zip.file(p.path, p.bytes); manifest += '<manifest:file-entry manifest:full-path="' + p.path + '" manifest:media-type="' + p.type + '"/>'; }
     manifest += '</manifest:manifest>';
@@ -911,7 +940,7 @@ export async function writeOdt(doc, model) {
     zip.file('styles.xml', styles);
     zip.file('meta.xml', meta);
     zip.file('META-INF/manifest.xml', manifest);
-    return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', mimeType: 'application/vnd.oasis.opendocument.text' });
+    return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', mimeType: mime });
   } finally {
     R.model = prev;
   }

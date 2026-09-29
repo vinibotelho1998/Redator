@@ -12,7 +12,7 @@ const TEXT_EXTS = ['txt', 'text', 'log', 'json', 'jsonc', 'json5', 'xml', 'xsd',
   'sql', 'ps1', 'psm1', 'psd1', 'bat', 'cmd', 'sh', 'bash', 'zsh', 'py', 'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'vue', 'css', 'scss', 'sass', 'less',
   'java', 'kt', 'kts', 'groovy', 'gradle', 'c', 'h', 'cpp', 'cc', 'hpp', 'cs', 'go', 'rs', 'php', 'rb', 'swift', 'vb', 'vbs', 'lua', 'r', 'pl', 'dart', 'scala',
   'srt', 'vtt', 'sub', 'rst', 'adoc', 'asciidoc', 'org', 'tex', 'bib', 'diff', 'patch', 'nfo', 'reg', 'tsv', 'gitignore', 'gitattributes', 'editorconfig', 'dockerfile'];
-const SUPPORTED = ['.docx', '.docm', '.dotx', '.dotm', '.doc', '.dot', '.md', '.markdown', '.csv', '.tsv', '.html', '.htm', '.xhtml', '.odt', '.rtf', '.pdf', ...TEXT_EXTS.map((e) => '.' + e)];
+const SUPPORTED = ['.docx', '.docm', '.dotx', '.dotm', '.doc', '.dot', '.md', '.markdown', '.csv', '.tsv', '.html', '.htm', '.xhtml', '.odt', '.ott', '.fodt', '.rtf', '.pdf', '.epub', '.mht', '.mhtml', '.eml', ...TEXT_EXTS.map((e) => '.' + e)];
 
 app.setName(APP_NAME);
 if (process.platform === 'win32') app.setAppUserModelId('br.redator.app');
@@ -507,16 +507,19 @@ ipcMain.handle('file:open-dialog', async (event, opts = {}) => {
     defaultPath: opts.defaultPath,
     properties: ['openFile', 'multiSelections'],
     filters: opts.filters || [
-      { name: 'Todos os documentos', extensions: ['docx', 'docm', 'dotx', 'doc', 'odt', 'md', 'markdown', 'txt', 'html', 'htm', 'rtf', 'pdf'] },
+      { name: 'Todos os documentos', extensions: ['docx', 'docm', 'dotx', 'dotm', 'doc', 'dot', 'odt', 'ott', 'fodt', 'md', 'markdown', 'txt', 'csv', 'html', 'htm', 'xhtml', 'mht', 'mhtml', 'rtf', 'pdf', 'epub', 'eml'] },
       { name: 'Documento do Word', extensions: ['docx', 'docm', 'dotx'] },
       { name: 'Documento do Word 97-2003', extensions: ['doc', 'dot'] },
-      { name: 'Texto OpenDocument', extensions: ['odt'] },
+      { name: 'Texto OpenDocument', extensions: ['odt', 'ott', 'fodt'] },
       { name: 'Markdown', extensions: ['md', 'markdown'] },
       { name: 'Página da Web', extensions: ['html', 'htm'] },
       { name: 'Texto sem formatação', extensions: ['txt', 'text', 'log', 'csv'] },
       { name: 'Texto e código', extensions: TEXT_EXTS },
       { name: 'Rich Text', extensions: ['rtf'] },
       { name: 'PDF', extensions: ['pdf'] },
+      { name: 'Livro digital EPUB', extensions: ['epub'] },
+      { name: 'Página da Web em arquivo único', extensions: ['mht', 'mhtml'] },
+      { name: 'Mensagem de e-mail', extensions: ['eml'] },
       { name: 'Todos os arquivos', extensions: ['*'] },
     ],
   });

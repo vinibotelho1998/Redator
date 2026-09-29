@@ -183,6 +183,53 @@
       app.pristine = true; app.dirty = false; app.filePath = null;
     }
 
+    // 3d. EPUB, página MHT, e-mail e OpenDocument plano
+    {
+      const scan = (doc) => {
+        const c = { imgs: [], bullets: 0, links: [], bold: [] };
+        doc.descendants((n) => {
+          if (n.type.name === 'drawing') c.imgs.push(n.attrs);
+          if (n.type.name === 'paragraph' && n.attrs.numId) c.bullets++;
+          if (n.isText) {
+            const l = n.marks.find((m) => m.type.name === 'hyperlink');
+            if (l) c.links.push([n.text, l.attrs.href]);
+            if (n.marks.some((m) => m.type.name === 'b')) c.bold.push(n.text);
+          }
+          return true;
+        });
+        return c;
+      };
+      const para = (doc, t) => { let f = null; doc.forEach((n) => { if (!f && n.textContent === t) f = n; }); return f; };
+      const textOf = (doc) => doc.textBetween(0, doc.content.size, '\n', ' ');
+
+      let r = await open('livro.epub');
+      let doc = app.view.state.doc;
+      let c = scan(doc);
+      const c1 = para(doc, 'Capítulo 1: O começo');
+      const c2 = para(doc, 'Capítulo 2: O fim');
+      expect('epub: capítulos na ordem, cada um numa página, com título', !!c1 && !!c2 && !!c1.attrs.styleId && c2.attrs.styleId === c1.attrs.styleId && c2.attrs.pageBreakBefore === true && textOf(doc).indexOf('O começo') < textOf(doc).indexOf('O fim'), { c1: c1 && c1.attrs.styleId, c2: c2 && c2.attrs });
+      expect('epub: imagem de dentro do livro, lista e só o link externo', c.imgs.length === 1 && /^blob:/.test(c.imgs[0].src || '') && c.bullets === 2 && c.links.length === 1 && c.links[0][1] === 'https://example.com/', c);
+      expect('epub: abre convertido com o título do livro', app.importKind === 'epub' && app.format === 'docx' && app.model.properties.title === 'Livro de Teste' && app.importPath === r.p, { kind: app.importKind, title: app.model.properties.title });
+      expect('epub salvo como docx sem XML inválido', (await rt.validateZip(await rt.writeDocx(app.model, doc, { author: 'Teste' }))).length === 0);
+
+      await open('pagina.mht');
+      doc = app.view.state.doc;
+      c = scan(doc);
+      expect('mht: texto com acentos, imagem de dentro do arquivo e sem botões', textOf(doc).includes('Notícia arquivada') && textOf(doc).includes('ação, pão e você') && !textOf(doc).includes('Compartilhar') && c.imgs.length === 1 && c.imgs[0].cx > 0 && app.importKind === 'mht', { texto: textOf(doc).slice(0, 120), imgs: c.imgs.length });
+
+      await open('mensagem.eml');
+      doc = app.view.state.doc;
+      c = scan(doc);
+      const t = textOf(doc);
+      expect('eml: assunto, remetente, corpo em HTML, imagem e anexo', doc.firstChild.textContent === 'Relatório de reunião ✔' && t.includes('De: João Silva <joao@example.com>') && t.includes('Para: Maria') && c.bold.includes('resumo') && c.imgs.length === 1 && t.includes('notas.txt'), { inicio: t.slice(0, 160), imgs: c.imgs.length, bold: c.bold });
+
+      await open('documento.fodt');
+      doc = app.view.state.doc;
+      c = scan(doc);
+      expect('fodt: título, negrito e imagem do XML', textOf(doc).includes('Documento plano') && c.bold.includes('negrito') && c.imgs.length === 1 && app.importKind === 'fodt' && app.format === 'odt', { texto: textOf(doc).slice(0, 80), bold: c.bold, imgs: c.imgs.length, fmt: app.format });
+      app.pristine = true; app.dirty = false; app.filePath = null; app.importPath = null;
+    }
+
     // 4a. Página salva da web: só o conteúdo
     {
       await open('pagina-salva.html');
