@@ -129,11 +129,13 @@ exemplo em `tests/fixtures`:
 - `.md` salvo sem edição igual byte a byte, inclusive com CRLF e BOM;
 - `.md` editado mudando só as linhas editadas, e relido com a mesma estrutura;
 - propriedades, callouts, `[[links]]` e anexos do Obsidian;
-- `.txt` em Windows-1252 com tabulações voltando igual;
+- `.txt` em Windows-1252 com tabulações voltando igual, e salvo como `.docx` com
+  o estilo de texto simples;
+- página da web salva abrindo sem botões, scripts e partes escondidas;
 - `.rtf` no formato do Word com acentos, listas, tabela, imagem, link, nota de
   rodapé, cabeçalho e rodapé, e a ida e volta mantendo texto e estrutura;
-- recuperação automática devolvendo `.md` e `.rtf` com a edição, e a cópia
-  apagada ao salvar;
+- recuperação automática devolvendo `.md`, `.rtf` e `.txt` com a edição, e a
+  cópia apagada ao salvar;
 - `.docx` gravado sem XML inválido e estável em ida e volta;
 - exportação para `.odt`, `.html`, `.txt`, `.md` e `.rtf`;
 - paginação e digitação num documento longo;
