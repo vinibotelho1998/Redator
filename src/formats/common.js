@@ -108,6 +108,16 @@ export function resolveRelative(baseDir, src) {
   return fileUrl(out.join('/'));
 }
 
+// Bytes de um canvas. toDataURL é síncrono: o toBlob espera uma folga do
+// processador, que numa janela em segundo plano só vem uma vez por segundo.
+export function canvasToBytes(canvas, type = 'image/png', quality = 0.9) {
+  const url = canvas.toDataURL(type, quality);
+  const bin = atob(url.slice(url.indexOf(',') + 1));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
 export function loadImageSize(src, timeout = 4000) {
   return new Promise((resolve) => {
     const img = new Image();

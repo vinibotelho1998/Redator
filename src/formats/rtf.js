@@ -6,7 +6,7 @@ import { R, effectiveNumPr, fontName, colorOf, shdColor } from '../editor/render
 import { NumberingCounter } from '../docx/numbering.js';
 import { newHeaderFooter } from '../docx/writer.js';
 import { MIME } from '../docx/reader.js';
-import { blankModel, finalizeDoc } from './common.js';
+import { blankModel, finalizeDoc, canvasToBytes } from './common.js';
 import { HIGHLIGHT } from '../util/color.js';
 import { mergeRun, mergePPr } from '../docx/props.js';
 
@@ -987,8 +987,7 @@ class RtfWriter {
         const cv = document.createElement('canvas');
         cv.width = bmp.width; cv.height = bmp.height;
         cv.getContext('2d').drawImage(bmp, 0, 0);
-        const blob = await new Promise((r) => cv.toBlob(r, 'image/png'));
-        bytes = new Uint8Array(await blob.arrayBuffer());
+        bytes = canvasToBytes(cv, 'image/png');
         blip = '\\pngblip';
       } catch { return ''; }
     }

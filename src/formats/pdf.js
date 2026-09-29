@@ -7,7 +7,7 @@
 import { schema } from '../editor/schema.js';
 import { R } from '../editor/render.js';
 import { newHeaderFooter } from '../docx/writer.js';
-import { blankModel, finalizeDoc } from './common.js';
+import { blankModel, finalizeDoc, canvasToBytes } from './common.js';
 
 const nodes = schema.nodes;
 const M = schema.marks;
@@ -237,9 +237,8 @@ function objFrom(page, ref) {
 
 async function canvasBytes(canvas, opaque) {
   const jpeg = opaque && canvas.width * canvas.height > 250000;
-  const blob = await new Promise((r) => canvas.toBlob(r, jpeg ? 'image/jpeg' : 'image/png', 0.9));
-  if (!blob) return null;
-  return { bytes: new Uint8Array(await blob.arrayBuffer()), ext: jpeg ? 'jpg' : 'png', type: jpeg ? 'image/jpeg' : 'image/png' };
+  const type = jpeg ? 'image/jpeg' : 'image/png';
+  return { bytes: canvasToBytes(canvas, type, 0.9), ext: jpeg ? 'jpg' : 'png', type };
 }
 
 async function imageToBytes(pdfjs, img) {
@@ -291,7 +290,8 @@ async function renderPage(page, scale) {
   const g = canvas.getContext('2d');
   g.fillStyle = '#fff';
   g.fillRect(0, 0, canvas.width, canvas.height);
-  await page.render({ canvas, canvasContext: g, viewport: vp }).promise;
+  // modo de impressão: desenha sem esperar o quadro de animação, que numa janela em segundo plano quase não vem
+  await page.render({ canvas, canvasContext: g, viewport: vp, intent: 'print' }).promise;
   return canvasBytes(canvas, true);
 }
 
