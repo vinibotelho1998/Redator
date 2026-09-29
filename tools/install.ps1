@@ -60,7 +60,7 @@ foreach ($ext in $types.Keys) { New-ItemProperty -Path "$classes\Applications\Re
 $cap = 'HKCU:\Software\Redator\Capabilities'
 if (-not (Test-Path "$cap\FileAssociations")) { New-Item -Path "$cap\FileAssociations" -Force | Out-Null }
 New-ItemProperty -Path $cap -Name 'ApplicationName' -Value 'Redator' -PropertyType String -Force | Out-Null
-New-ItemProperty -Path $cap -Name 'ApplicationDescription' -Value 'Editor de documentos com a cara do Word: docx, odt, md, txt e PDF' -PropertyType String -Force | Out-Null
+New-ItemProperty -Path $cap -Name 'ApplicationDescription' -Value 'Editor de documentos com a cara do Word: docx, doc, odt, rtf, md, txt e PDF' -PropertyType String -Force | Out-Null
 New-ItemProperty -Path $cap -Name 'ApplicationIcon' -Value "`"$exe`",0" -PropertyType String -Force | Out-Null
 foreach ($ext in $types.Keys) { New-ItemProperty -Path "$cap\FileAssociations" -Name $ext -Value ('Redator' + $ext) -PropertyType String -Force | Out-Null }
 if (-not (Test-Path 'HKCU:\Software\RegisteredApplications')) { New-Item -Path 'HKCU:\Software\RegisteredApplications' -Force | Out-Null }
