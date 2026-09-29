@@ -667,6 +667,31 @@ ipcMain.handle('app:default-status', async () => {
   return out;
 });
 
+// PDF convertido: o original abre no visualizador de PDF do Chromium, fiel ao arquivo
+ipcMain.handle('pdf:view-original', (event, p) => {
+  if (!p || !/\.pdf$/i.test(p) || !isSupportedFile(p)) return false;
+  const parent = windowFor(event);
+  const pb = parent && !parent.isDestroyed() ? parent.getBounds() : { x: undefined, y: undefined, width: 1100, height: 860 };
+  const iconPath = path.join(__dirname, 'app', 'icons', 'redator.ico');
+  const w = new BrowserWindow({
+    x: pb.x != null ? pb.x + 36 : undefined, y: pb.y != null ? pb.y + 36 : undefined,
+    width: Math.max(800, pb.width - 72), height: Math.max(600, pb.height - 72),
+    title: path.basename(p) + ' - original - Redator', backgroundColor: '#525659', show: !HIDDEN_TEST,
+    icon: fs.existsSync(iconPath) ? iconPath : undefined,
+    webPreferences: { plugins: true, contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  w.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^(https?|mailto):/i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  w.webContents.on('will-navigate', (e, url) => {
+    if (!/^file:/i.test(url)) { e.preventDefault(); if (/^(https?|mailto):/i.test(url)) shell.openExternal(url); }
+  });
+  w.webContents.on('page-title-updated', (e) => e.preventDefault());
+  w.loadURL(require('url').pathToFileURL(p).href);
+  return true;
+});
+
 ipcMain.handle('app:open-default-apps', async () => {
   try { await shell.openExternal('ms-settings:defaultapps?registeredAppUser=Redator'); } catch {
     try { await shell.openExternal('ms-settings:defaultapps'); } catch { return false; }

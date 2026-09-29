@@ -42,6 +42,9 @@ input, select, textarea { font: inherit; color: inherit; }
 .tb-title { display: flex; align-items: baseline; gap: 6px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .tb-title-text { overflow: hidden; text-overflow: ellipsis; }
 .tb-title-state { opacity: 0.8; font-size: 11.5px; }
+.tb-orig { -webkit-app-region: no-drag; align-self: center; border: none; border-radius: 3px; padding: 2px 8px; background: rgba(255,255,255,.16); color: #fff; font: inherit; font-size: 11.5px; cursor: default; }
+.tb-orig:hover { background: rgba(255,255,255,.3); }
+.tb-orig[hidden] { display: none; }
 .tb-search-wrap { -webkit-app-region: no-drag; position: relative; width: min(360px, 32vw); }
 .tb-search-icon { position: absolute; left: 9px; top: 7px; color: #fff; opacity: 0.85; pointer-events: none; }
 .tb-search-icon svg { width: 14px; height: 14px; }

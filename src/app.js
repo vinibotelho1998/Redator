@@ -210,6 +210,10 @@ class App {
     this.saveBtn = qa('save', 'Salvar', () => this.save(), this.sc('save'));
     this.titleText = h('span', { class: 'tb-title-text' });
     this.titleState = h('span', { class: 'tb-title-state' });
+    // PDF convertido: o original, fiel ao arquivo, abre no visualizador de PDF
+    this.origBtn = h('button', { class: 'tb-orig', type: 'button', text: 'Ver original', hidden: true });
+    this.origBtn.addEventListener('click', () => this.viewOriginal());
+    tooltip(this.origBtn, 'Abrir o PDF original, como ele é, para ler e imprimir');
     this.searchBox = h('input', { class: 'tb-search', type: 'search', placeholder: 'Pesquisar', spellcheck: 'false' });
     this.searchBox.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); this.showNavPane('search', this.searchBox.value); }
@@ -217,7 +221,7 @@ class App {
     });
     this.titlebar = h('header', { class: 'titlebar' },
       h('div', { class: 'tb-left' }, h('span', { class: 'tb-logo' }, h('img', { src: 'icons/redator-64.png', alt: '', width: '20', height: '20' })), this.saveBtn, this.undoBtn, this.redoBtn),
-      h('div', { class: 'tb-center' }, h('div', { class: 'tb-title' }, this.titleText, this.titleState),
+      h('div', { class: 'tb-center' }, h('div', { class: 'tb-title' }, this.titleText, this.titleState, this.origBtn),
         h('div', { class: 'tb-search-wrap' }, h('span', { class: 'tb-search-icon', html: icon('find') }), this.searchBox)),
       h('div', { class: 'tb-right' }, h('span', { class: 'tb-user', text: (this.userName || 'U').slice(0, 1).toUpperCase(), title: this.userName || '' })));
     this.ribbon = new Ribbon(this);
@@ -522,6 +526,11 @@ class App {
     this.titleText.textContent = name + ' - Redator';
     this.titleState.textContent = this.recovered ? '• Recuperado' : this.dirty ? '• Não salvo' : this.filePath ? '• Salvo neste PC' : this.importPath ? '• ' + ((COMPAT[this.importKind] || {}).label || 'Modo de compatibilidade') : '';
     this.host.setDocState({ title: (this.dirty ? '* ' : '') + name + ' - Redator', dirty: this.dirty, filePath: this.filePath || this.importPath || null });
+    if (this.origBtn) this.origBtn.hidden = !(this.importPath && /\.pdf$/i.test(this.importPath) && this.host.viewPdf);
+  }
+
+  viewOriginal() {
+    if (this.importPath && this.host.viewPdf) this.host.viewPdf(this.importPath);
   }
 
   markDirty() {

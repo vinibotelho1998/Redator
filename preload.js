@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('host', {
   ocr: (data, ext) => ipcRenderer.invoke('ocr:image', data, ext),
   defaultStatus: () => ipcRenderer.invoke('app:default-status'),
   openDefaultApps: () => ipcRenderer.invoke('app:open-default-apps'),
+  viewPdf: (p) => ipcRenderer.invoke('pdf:view-original', p),
   saveRecovery: (data, meta) => ipcRenderer.invoke('recover:save', data, meta),
   clearRecovery: () => ipcRenderer.send('recover:clear'),
   takeRecovery: (id) => ipcRenderer.invoke('recover:take', id),
