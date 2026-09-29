@@ -461,7 +461,7 @@ class App {
     if (!this.host.saveRecovery || this.prefs.autoRecover === false || !this.view) return null;
     if (!this.dirty || this.saving || this.recoverJob || this.recoverStamp === this.editStamp) return null;
     const now = Date.now();
-    if (!force && (now - this.lastEdit < 2500 || now - this.lastRecover < 60000)) return null;
+    if (!force && (now - this.lastEdit < 2500 || now - this.lastRecover < (this.recoverEvery || 60000))) return null;
     const stamp = this.editStamp;
     const job = async () => {
       const doc = this.view.state.doc;
@@ -474,11 +474,17 @@ class App {
         const path = this.filePath || this.importPath || '';
         const { text, files } = writeMarkdown(doc, this.model, { baseDir: dirName(path), baseName: stripExt(baseName(path) || this.docName) });
         if (!files.length) { data = encodeText(text, textInfo || { encoding: 'utf-8', bom: false }); kind = 'md'; }
+      } else if (this.format === 'txt') {
+        // texto puro é rápido de gravar mesmo num log enorme
+        data = writeText(doc, this.model);
+        kind = 'txt';
       }
       if (!data) data = await writeDocx(this.model, doc, { author: this.prefs.author || this.userName || '' });
       const meta = { name: this.docName, path: this.filePath || this.importPath || null, format: this.format, kind, text: textInfo };
       const id = await this.host.saveRecovery(data, meta);
       if (id) { this.recoverStamp = stamp; this.recoverId = id; }
+      // documento pesado de gravar: a cópia fica mais espaçada para não pesar na digitação
+      this.recoverEvery = Math.max(60000, (Date.now() - now) * 40);
     };
     this.lastRecover = now;
     this.recoverJob = job().catch((err) => console.warn('AutoRecuperação falhou', err)).finally(() => { this.recoverJob = null; });
@@ -489,8 +495,10 @@ class App {
     const r = await this.host.takeRecovery(id);
     if (!r) return false;
     const { meta, data } = r;
-    const res = meta.kind === 'md' ? await readMarkdown(data, meta.path || '', { host: this.host }) : await readDocx(data);
-    if (meta.kind !== 'md' && meta.text && ['md', 'txt'].includes(meta.format)) res.model.extra.text = meta.text;
+    const res = meta.kind === 'md' ? await readMarkdown(data, meta.path || '', { host: this.host })
+      : meta.kind === 'txt' ? await readText(data, meta.path || '')
+        : await readDocx(data);
+    if (meta.kind === 'docx' && meta.text && ['md', 'txt'].includes(meta.format)) res.model.extra.text = meta.text;
     this.setDocument(res.model, res.doc, { path: null, format: meta.format || 'docx', name: meta.name || 'Documento1' });
     // salvar pede confirmação do local, que já vem com o arquivo original
     this.importPath = meta.path || null;

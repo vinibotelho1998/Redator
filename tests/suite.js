@@ -175,6 +175,15 @@
       if (app.recoverJob) await app.recoverJob;
       const okRtf = await app.restoreRecovered(app.recoverId);
       expect('recuperação: rtf volta com a edição', okRtf && app.view.state.doc.textContent === t2 && app.format === 'rtf', { okRtf, format: app.format });
+      await open('texto-ansi.txt');
+      const firstText = app.view.state.doc.firstChild.textContent;
+      insertAtStart(app.view, firstText.slice(0, 6), 'ÇÃO ');
+      const t3 = app.view.state.doc.textContent;
+      await app.saveRecovery(true);
+      if (app.recoverJob) await app.recoverJob;
+      const okTxt = await app.restoreRecovered(app.recoverId);
+      const enc = app.model.extra.text && app.model.extra.text.encoding;
+      expect('recuperação: txt volta como texto, na mesma codificação', okTxt && app.view.state.doc.textContent === t3 && app.format === 'txt' && enc === 'windows-1252', { okTxt, format: app.format, enc });
       const id = app.recoverId;
       app.markClean();
       await sleep(100);
