@@ -75,11 +75,13 @@ oferece de volta tudo o que estava aberto, como a AutoRecuperação do Word.
 Ctrl+S. Quem vem do Word em português troca em Arquivo, Opções para Ctrl+N
 negrito, Ctrl+S sublinhado e Ctrl+B salvar.
 
-**Arquivos de texto intocados.** `.txt`, `.csv` e `.log` voltam com a mesma
-codificação, o mesmo fim de linha e as mesmas tabulações.
+**Arquivos de texto intocados.** `.txt`, `.log`, JSON, XML, YAML, INI, SQL,
+scripts e código-fonte voltam com a mesma codificação, o mesmo fim de linha e
+as mesmas tabulações. O `.csv` abre como tabela e volta byte a byte igual.
 
 **Leitor padrão.** O instalador registra o Redator no "Abrir com" do Windows e em
-Aplicativos padrão, para `.docx`, `.doc`, `.pdf`, `.odt`, `.md`, `.rtf` e `.txt`. Como o Windows 11
+Aplicativos padrão, para `.docx`, `.doc`, `.pdf`, `.odt`, `.md`, `.rtf`, `.txt`,
+`.epub`, `.eml`, `.mht`, `.csv` e arquivos de configuração. Como o Windows 11
 não traz mais o WordPad, ele também serve para abrir os `.rtf` que sobraram.
 
 </td>
@@ -90,19 +92,24 @@ não traz mais o WordPad, ele também serve para abrir os `.rtf` que sobraram.
 
 | Formato | Abre | Salva |
 |---|:---:|:---:|
-| Documento do Word `.docx` `.docm` `.dotx` | ✅ | ✅ `.docx` |
-| Texto OpenDocument `.odt` | ✅ | ✅ |
+| Documento do Word `.docx` `.docm` `.dotx` `.dotm` | ✅ | ✅ `.docx` |
+| Texto OpenDocument `.odt` e modelo `.ott` | ✅ | ✅ |
+| OpenDocument plano `.fodt` | ✅ | como `.odt` |
 | Markdown `.md` `.markdown` | ✅ | ✅ |
-| Página da Web `.html` `.htm` | ✅ | ✅ |
-| Texto `.txt` `.csv` `.log` | ✅ | ✅ |
+| Página da Web `.html` `.htm` `.xhtml` | ✅ | ✅ |
+| Página da Web em arquivo único `.mht` `.mhtml` | ✅ | como `.docx` |
 | Rich Text `.rtf` | ✅ | ✅ |
-| Word 97-2003 `.doc` | ✅ | como `.docx` |
+| Word 97-2003 `.doc` `.dot` | ✅ | como `.docx` |
 | PDF `.pdf` | ✅ editável | ✅ |
+| Livro digital `.epub` | ✅ | como `.docx` |
+| E-mail `.eml` | ✅ | como `.docx` |
+| CSV `.csv` `.tsv` | ✅ como tabela | ✅ |
+| Texto `.txt` `.log` e código: `.json` `.xml` `.yaml` `.ini` `.sql` `.ps1` `.py` `.js` e outros | ✅ | ✅ |
 
 O `.doc` antigo abre em modo de compatibilidade, com títulos numerados, listas,
 tabelas com células mescladas, imagens, links, sumário, notas de rodapé e
-cabeçalho. Ao salvar, o Redator grava um `.docx` novo ao lado e não toca no
-original.
+cabeçalho. PDF, EPUB, MHT, e-mail e OpenDocument plano abrem convertidos. Nos
+dois casos, salvar grava um arquivo novo ao lado e não toca no original.
 
 ## Instalação
 
@@ -140,6 +147,11 @@ exemplo em `tests/fixtures`:
 - página da web salva abrindo sem botões, scripts e partes escondidas;
 - PDF convertido na ordem de leitura, com títulos, tabela com as cores, gráfico e
   lista, e salvo como `.docx` válido;
+- CSV abrindo como tabela, com aspas, separador e quebra de linha dentro da
+  célula, voltando igual sem edição e mudando só a linha editada;
+- EPUB com capítulos em páginas próprias, imagens e links; página `.mht` com a
+  imagem de dentro; e-mail com assunto, remetente, corpo, imagem e anexo;
+  OpenDocument plano com a imagem embutida;
 - `.rtf` no formato do Word com acentos, listas, tabela, imagem, link, nota de
   rodapé, cabeçalho e rodapé, e a ida e volta mantendo texto e estrutura;
 - recuperação automática devolvendo `.md`, `.rtf` e `.txt` com a edição, e a
