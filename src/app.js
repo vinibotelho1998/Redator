@@ -270,6 +270,7 @@ class App {
     });
     this.host.on('app:context-menu', (info) => this.onContextMenu(info));
     this.host.on('app:request-close', () => this.requestClose());
+    this.host.on('app:focus', () => this.checkExternalChange());
     document.addEventListener('dragover', (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
     document.addEventListener('drop', (e) => {
       const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
@@ -379,6 +380,7 @@ class App {
     try {
       const f = await this.host.readFile(p);
       await this.loadBytes(f.data, p, f.readonly);
+      this.fileStamp = { path: p, mtime: f.mtime, size: f.size };
     } finally {
       this.setBusy(null);
     }
@@ -443,6 +445,45 @@ class App {
       fonts: this.systemFonts,
       ocr: opts.ocr && this.host.ocr ? (data, ext) => this.host.ocr(data, ext) : null,
     });
+  }
+
+  // Arquivo mudou fora do Redator, por sincronização, git ou outro editor: sem
+  // alterações aqui, recarrega sozinho; com alterações, pergunta antes
+  async checkExternalChange() {
+    const p = this.filePath;
+    if (!p || !this.host.statFile || !this.fileStamp || this.fileStamp.path !== p || this.checkingDisk || this.saving || D.isDialogOpen()) return;
+    this.checkingDisk = true;
+    try {
+      const st = await this.host.statFile(p);
+      if (!st || this.filePath !== p) return;
+      if (st.mtime === this.fileStamp.mtime && st.size === this.fileStamp.size) return;
+      // cada mudança é tratada uma vez
+      this.fileStamp = { path: p, mtime: st.mtime, size: st.size };
+      if (this.dirty) {
+        const r = await D.messageBox('Redator', '"' + this.docName + '" foi alterado por outro programa.\nRecarregar e perder as alterações feitas aqui?', [
+          { label: 'Recarregar', value: 'reload' },
+          { label: 'Manter as minhas', primary: true, value: 'keep' },
+        ], { cancelValue: 'keep', icon: 'warn' });
+        if (r !== 'reload' || this.filePath !== p) return;
+      }
+      await this.reloadFromDisk();
+      this.setInfo('Recarregado: o arquivo mudou fora do Redator');
+    } catch (err) {
+      console.warn('Conferência do arquivo falhou', err);
+    } finally {
+      this.checkingDisk = false;
+    }
+  }
+
+  async reloadFromDisk() {
+    const p = this.filePath;
+    const scroll = this.scrollEl.scrollTop;
+    const at = this.view.state.selection.from;
+    await this.loadPath(p);
+    this.layout.runNow(4);
+    this.scrollEl.scrollTop = scroll;
+    const doc = this.view.state.doc;
+    try { this.view.dispatch(this.view.state.tr.setSelection(TextSelection.near(doc.resolve(Math.min(at, doc.content.size))))); } catch { /* posição fora do texto novo */ }
   }
 
   async offerOcr(bytes, path, pages, password) {
@@ -711,6 +752,10 @@ class App {
       }
       this.filePath = path;
       this.importPath = null;
+      if (this.host.statFile) {
+        const st = await this.host.statFile(path);
+        if (st) this.fileStamp = { path, mtime: st.mtime, size: st.size };
+      }
       this.format = fmt;
       this.docName = baseName(path);
       this.model.format = fmt;

@@ -403,6 +403,10 @@ ipcMain.handle('file:read', async (_event, p) => {
   return { data: new Uint8Array(data.buffer, data.byteOffset, data.byteLength), readonly, mtime: st.mtimeMs, size: st.size, name: path.basename(p), dir: path.dirname(p) };
 });
 
+ipcMain.handle('file:stat', async (_event, p) => {
+  try { const st = await fs.promises.stat(p); return st.isFile() ? { mtime: st.mtimeMs, size: st.size } : null; } catch { return null; }
+});
+
 ipcMain.handle('file:exists', (_event, p) => {
   try { return fs.statSync(p).isFile(); } catch { return false; }
 });

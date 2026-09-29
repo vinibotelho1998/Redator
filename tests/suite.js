@@ -259,6 +259,32 @@
       expect('html: conteúdo da página mantido', ['Título do artigo', 'Primeiro parágrafo com negrito e um link.', 'Segundo parágrafo.', 'Gráfico de vendas', 'Item um', 'Item marcado'].every((s) => text.includes(s)) && tables === 1, text.slice(0, 300));
     }
 
+    // 4c. Arquivo alterado por outro programa: recarrega sozinho; com alterações aqui, pergunta
+    if (window.__tmp) {
+      const p = window.__tmp + 'externo.md';
+      const enc = (t) => new TextEncoder().encode(t);
+      await host.writeFile(p, enc('# Nota\n\nPrimeira versão.\n'));
+      app.pristine = true; app.dirty = false; app.filePath = null; app.importPath = null;
+      await app.loadPath(p);
+      await sleep(50);
+      await host.writeFile(p, enc('# Nota\n\nSegunda versão, gravada por outro programa.\n'));
+      await app.checkExternalChange();
+      expect('arquivo alterado fora: recarrega sozinho', app.view.state.doc.textContent.includes('Segunda versão') && !app.dirty, app.view.state.doc.textContent);
+      app.view.dispatch(app.view.state.tr.insertText('minha edição ', 2));
+      await host.writeFile(p, enc('# Nota\n\nTerceira versão.\n'));
+      const check = app.checkExternalChange();
+      let dlg = null;
+      for (let i = 0; i < 40 && !(dlg = document.querySelector('.dlg-overlay')); i++) await sleep(25);
+      const keep = dlg && [...dlg.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Manter as minhas');
+      if (keep) keep.click();
+      await check;
+      expect('arquivo alterado fora com edição aqui: pergunta e mantém', !!keep && app.dirty && app.view.state.doc.textContent.includes('minha edição') && !app.view.state.doc.textContent.includes('Terceira'), { dialogo: !!dlg, texto: app.view.state.doc.textContent });
+      await app.writeTo(p, 'md');
+      await app.checkExternalChange();
+      expect('gravação do próprio Redator não conta como mudança de fora', !document.querySelector('.dlg-overlay') && app.view.state.doc.textContent.includes('minha edição'));
+      app.pristine = true; app.dirty = false; app.filePath = null;
+    }
+
     // 4b. AutoRecuperação: a cópia guardada volta com as alterações
     {
       const { p, bytes } = await open('readme-crlf.md');

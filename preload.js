@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('host', {
   init: () => ipcRenderer.invoke('app:init'),
   readFile: (p) => ipcRenderer.invoke('file:read', p),
   fileExists: (p) => ipcRenderer.invoke('file:exists', p),
+  statFile: (p) => ipcRenderer.invoke('file:stat', p),
   writeFile: (p, data, extras) => ipcRenderer.invoke('file:write', p, data, extras),
   openDialog: (opts) => ipcRenderer.invoke('file:open-dialog', opts),
   imageDialog: () => ipcRenderer.invoke('file:image-dialog'),

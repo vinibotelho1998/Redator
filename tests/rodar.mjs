@@ -12,7 +12,7 @@ import electronPath from 'electron';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'redator-teste-'));
 const fixtures = path.join(root, 'tests', 'fixtures') + path.sep;
-const script = 'window.__fixtures = ' + JSON.stringify(fixtures) + ';\nwindow.__ci = ' + JSON.stringify(!!process.env.CI) + ';\n' + fs.readFileSync(path.join(root, 'tests', 'suite.js'), 'utf8');
+const script = 'window.__fixtures = ' + JSON.stringify(fixtures) + ';\nwindow.__tmp = ' + JSON.stringify(tmp + path.sep) + ';\nwindow.__ci = ' + JSON.stringify(!!process.env.CI) + ';\n' + fs.readFileSync(path.join(root, 'tests', 'suite.js'), 'utf8');
 const scriptPath = path.join(tmp, 'suite.js');
 fs.writeFileSync(scriptPath, script);
 
