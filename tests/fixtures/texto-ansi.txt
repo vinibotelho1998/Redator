@@ -1,0 +1,5 @@
+Nome	Valor
+Ação	10
+Índice	20,5
+
+Última linha sem nada depois
