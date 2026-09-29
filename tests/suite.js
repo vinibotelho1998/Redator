@@ -165,6 +165,23 @@
       app.pristine = true; app.dirty = false; app.filePath = null; app.importPath = null;
     }
 
+    // 3b2. PDF digitalizado: abre como imagem e o reconhecimento de texto do Windows lê a página
+    {
+      const p = FIX + 'digitalizado.pdf';
+      const f = await host.readFile(p);
+      const count = (doc) => { let n = 0; doc.descendants((x) => { if (x.type.name === 'drawing') n++; return true; }); return n; };
+      const plain = await app.readPdfBytes(f.data, p);
+      expect('pdf digitalizado: abre como imagem e é reconhecido como escaneado', plain.scanned === 1 && count(plain.doc) === 1, { scanned: plain.scanned, imagens: count(plain.doc) });
+      let res = null;
+      let err = null;
+      try { res = await app.readPdfBytes(f.data, p, { ocr: true }); } catch (e) { err = e.message; }
+      if (err && /instalado|só existe no Windows|não respondeu/.test(err)) pass('pdf digitalizado: sem reconhecimento de texto nesta máquina, conferência pulada (' + err + ')');
+      else {
+        const text = res ? res.doc.textBetween(0, res.doc.content.size, '\n', ' ') : '';
+        expect('pdf digitalizado: texto reconhecido vira parágrafos editáveis', /Indicadores/i.test(text) && /trimestre/i.test(text) && /Resumo/i.test(text) && count(res.doc) === 0, { err, inicio: text.slice(0, 200) });
+      }
+    }
+
     // 3c. CSV vira tabela e volta igual; editar uma célula muda só a linha dela
     {
       const { p, bytes } = await open('planilha.csv');

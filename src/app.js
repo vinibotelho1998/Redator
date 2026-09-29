@@ -380,7 +380,7 @@ class App {
     }
   }
 
-  async loadBytes(bytes, path, readonly) {
+  async loadBytes(bytes, path, readonly, opts = {}) {
     const ext = extOf(path);
     let format = EXT_FORMAT[ext];
     let res;
@@ -399,7 +399,7 @@ class App {
     else if (format === 'odt') res = await readOdt(bytes, path);
     else if (format === 'rtf') res = await readRtf(bytes);
     else if (format === 'doc') res = await readDoc(bytes);
-    else if (format === 'pdf') res = await this.readPdfBytes(bytes, path);
+    else if (format === 'pdf') res = await this.readPdfBytes(bytes, path, opts);
     else if (format === 'epub') res = await readEpub(bytes);
     else if (format === 'mht') res = await readMht(bytes);
     else if (format === 'eml') res = await readEml(bytes);
@@ -408,7 +408,7 @@ class App {
       // tenta descobrir pelo conteúdo
       if (bytes[0] === 0x50 && bytes[1] === 0x4b) res = await readDocx(bytes);
       else if (bytes[0] === 0xD0 && bytes[1] === 0xCF) res = await readDoc(bytes);
-      else if (isPdf(bytes)) res = await this.readPdfBytes(bytes, path);
+      else if (isPdf(bytes)) res = await this.readPdfBytes(bytes, path, opts);
       else res = await readText(bytes, path);
     }
     // formatos que o Redator lê mas não grava abrem convertidos: salvar grava um arquivo novo ao lado
@@ -423,15 +423,41 @@ class App {
     if ([...res.model.media.values()].some((m) => m.pending)) {
       convertPendingMedia(res.model, this.host).then(() => { this.layout.invalidateStatic(); this.layout.invalidate(); });
     }
+    // PDF digitalizado abre como imagem: oferece reconhecer o texto
+    if (res.scanned && !opts.ocr && this.host.ocr) setTimeout(() => this.offerOcr(bytes, path, res.scanned, res.password), 300);
   }
 
-  async readPdfBytes(bytes, path) {
+  async readPdfBytes(bytes, path, opts = {}) {
     const name = baseName(path);
     return readPdf(bytes, {
-      onProgress: (n, total) => { if (total > 3) this.setBusy('Abrindo ' + name + '... página ' + n + ' de ' + total); },
+      onProgress: (n, total) => {
+        if (opts.ocr) this.setBusy('Reconhecendo o texto de ' + name + '... página ' + n + ' de ' + total);
+        else if (total > 3) this.setBusy('Abrindo ' + name + '... página ' + n + ' de ' + total);
+      },
       askPassword: (retry) => D.passwordDialog(name, retry),
+      password: opts.password,
       fonts: this.systemFonts,
+      ocr: opts.ocr && this.host.ocr ? (data, ext) => this.host.ocr(data, ext) : null,
     });
+  }
+
+  async offerOcr(bytes, path, pages, password) {
+    if (this.importPath !== path || this.dirty) return;
+    const what = pages === 1 ? 'Uma página deste PDF é digitalizada e abriu' : pages + ' páginas deste PDF são digitalizadas e abriram';
+    const r = await D.messageBox('Redator', what + ' como imagem.\nReconhecer o texto para poder editar e pesquisar?', [
+      { label: 'Reconhecer texto', primary: true, value: 'ok' },
+      { label: 'Agora não', value: 'no' },
+    ], { cancelValue: 'no' });
+    if (r !== 'ok' || this.importPath !== path || this.dirty) return;
+    this.setBusy('Reconhecendo o texto...');
+    try {
+      await this.loadBytes(bytes, path, false, { ocr: true, password });
+      this.setInfo('Texto reconhecido');
+    } catch (err) {
+      this.showError('Não foi possível reconhecer o texto.', err);
+    } finally {
+      this.setBusy(null);
+    }
   }
 
   setDocument(model, doc, opts) {

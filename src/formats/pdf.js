@@ -353,8 +353,9 @@ function finishLine(l) {
     const weight = new Map();
     for (const it of l.items) weight.set(it.size, (weight.get(it.size) || 0) + it.str.length);
     l.size = [...weight.entries()].sort((a, b) => b[1] - a[1])[0][0];
-    const main = l.items.find((it) => it.size === l.size) || l.items[0];
-    l.y = main.y;
+    // linha de base: mediana das palavras do tamanho principal, que no texto reconhecido variam um pouco
+    const mains = l.items.filter((it) => it.size === l.size);
+    l.y = median((mains.length ? mains : l.items).map((it) => it.y));
     l.x = Math.min(...l.items.map((it) => it.x));
     l.top = l.y - l.size * 0.8;
     l.bottom = l.y + l.size * 0.25;
@@ -442,6 +443,7 @@ function finishPara(p) {
   p.bottom = last.bottom;
   p.size = first.size;
   p.bold = p.lines.every((l) => l.bold);
+  p.ocr = p.lines.every((l) => l.items.every((it) => it.ocr));
   p.text = p.lines.map((l) => l.text).join(' ').replace(/\s+/g, ' ').trim();
 }
 
@@ -452,11 +454,13 @@ export async function readPdf(bytes, opts = {}) {
   const base = new URL('../dist/pdfjs/', location.href).href;
   const task = pdfjs.getDocument({
     data: bytes.slice(), cMapUrl: base + 'cmaps/', cMapPacked: true, standardFontDataUrl: base + 'standard_fonts/',
-    isEvalSupported: false, useSystemFonts: true, fontExtraProperties: true,
+    isEvalSupported: false, useSystemFonts: true, fontExtraProperties: true, password: opts.password || undefined,
   });
+  let usedPassword = opts.password || null;
   task.onPassword = async (update, reason) => {
     const pw = opts.askPassword ? await opts.askPassword(reason === (pdfjs.PasswordResponses || {}).INCORRECT_PASSWORD) : null;
     if (pw == null) { task.destroy(); return; }
+    usedPassword = pw;
     update(pw);
   };
   let pdf;
@@ -468,10 +472,50 @@ export async function readPdf(bytes, opts = {}) {
     throw err;
   }
   try {
-    return await convert(pdfjs, pdf, opts);
+    const res = await convert(pdfjs, pdf, opts);
+    res.password = usedPassword;
+    return res;
   } finally {
     task.destroy();
   }
+}
+
+// Corpo da fonte estimado pela altura de cada palavra. As caixas do OCR do
+// Windows são justas: medidas num texto de corpo conhecido, uma palavra com
+// letras que sobem e que descem, como "diagramado", ocupa 0,66 do corpo; só
+// com as que sobem, 0,53; só com as que descem, 0,51; só letras baixas, 0,39.
+function wordEm(text, h) {
+  const t = String(text);
+  if (t.replace(/[^\p{L}\p{N}]/gu, '').length < 2) return null;
+  const up = /[\p{Lu}\p{N}bdfhklt]|[áéíóúâêôãõàü]/u.test(t);
+  const down = /[gjpqyç]/.test(t);
+  return h / (up && down ? 0.66 : up ? 0.53 : down ? 0.51 : 0.39);
+}
+
+// Palavras do reconhecimento de texto viram itens como os do texto do PDF
+function ocrItems(res, scale, n) {
+  const lines = (res.lines || []).filter((l) => l.length);
+  const ems = lines.map((l) => {
+    const est = l.map((w) => wordEm(w[0], w[4] / scale)).filter((v) => v);
+    return est.length ? median(est) : (Math.max(...l.map((w) => w[2] + w[4])) - Math.min(...l.map((w) => w[2]))) / scale / 0.95;
+  });
+  const body = median(ems) || 11;
+  const font = { family: null, bold: false, italic: false };
+  const items = [];
+  lines.forEach((l, i) => {
+    // linhas do mesmo corpo de texto ficam com o mesmo tamanho
+    const em = Math.abs(ems[i] - body) < body * 0.25 ? body : ems[i];
+    const size = Math.max(5, Math.round(em * 2) / 2);
+    // linha de base de cada palavra: o pé da caixa, menos a parte que desce;
+    // o OCR às vezes junta na mesma linha palavras de linhas vizinhas de uma tabela
+    for (const w of l) {
+      const t = String(w[0]);
+      if (!t.trim()) continue;
+      const y = (w[2] + w[4]) / scale - (/[gjpqyç]/.test(t) ? em * 0.13 : 0);
+      items.push({ str: t, x: w[1] / scale, y, size, w: w[3] / scale, font, page: n, ocr: true });
+    }
+  });
+  return items;
 }
 
 async function convert(pdfjs, pdf, opts) {
@@ -479,6 +523,8 @@ async function convert(pdfjs, pdf, opts) {
   model.format = 'pdf';
   const pages = [];
   const fontCache = new Map();
+  let scanPages = 0;
+  const ocrErrors = [];
   const known = new Set((opts.fonts || []).map((f) => f.toLowerCase()));
   for (let n = 1; n <= pdf.numPages; n++) {
     if (opts.onProgress) opts.onProgress(n, pdf.numPages);
@@ -526,8 +572,22 @@ async function convert(pdfjs, pdf, opts) {
     }
     // PDF digitalizado com texto reconhecido por baixo: fica o texto
     const scanned = hiddenChars > items.length / 2 && imgs.some((b) => b.w * b.h > vp.width * vp.height * 0.5);
-    const useItems = scanned ? items : visible;
-    const pageImgs = scanned ? imgs.filter((b) => b.w * b.h <= vp.width * vp.height * 0.5) : imgs;
+    let useItems = scanned ? items : visible;
+    let pageImgs = scanned ? imgs.filter((b) => b.w * b.h <= vp.width * vp.height * 0.5) : imgs;
+    // página digitalizada, só uma imagem sem texto: o reconhecimento de texto, quando pedido, lê a página
+    const scanImg = !scanned && useItems.reduce((t, it) => t + it.str.trim().length, 0) < 20 ? imgs.find((b) => b.w * b.h > vp.width * vp.height * 0.5) : null;
+    if (scanImg) {
+      scanPages++;
+      if (opts.ocr) {
+        const scale = Math.min(2.5, 2400 / Math.max(vp.width, vp.height));
+        const shot = await renderPage(page, scale).catch(() => null);
+        const res = shot ? await opts.ocr(shot.bytes, shot.ext).catch((err) => ({ err: err.message })) : { err: 'A página não pôde ser desenhada.' };
+        if (res && !res.err && res.lines) {
+          useItems = ocrItems(res, scale, n);
+          pageImgs = pageImgs.filter((b) => b !== scanImg);
+        } else ocrErrors.push((res && res.err) || 'falha');
+      }
+    }
     // slide: página deitada com fundo cobrindo tudo vira uma imagem fiel da página
     const pageArea = vp.width * vp.height;
     const bigFill = ops.fills.some((f) => {
@@ -579,7 +639,10 @@ async function convert(pdfjs, pdf, opts) {
   const prev = R.model;
   R.model = model;
   try {
-    return layoutDocument(model, pages);
+    if (opts.ocr && scanPages && ocrErrors.length === scanPages) throw new Error(ocrErrors[0]);
+    const res = layoutDocument(model, pages);
+    res.scanned = scanPages;
+    return res;
   } finally {
     R.model = prev;
   }
@@ -879,12 +942,13 @@ function extractHeaderFooter(pages) {
 function detectHeadings(paras, ctx) {
   const body = ctx.bodySize;
   const big = new Set();
-  for (const p of paras) if (p.lines && p.size >= body * 1.15 && p.text.length <= 200 && p.lines.length <= 3) big.add(p.size);
+  const isBig = (p) => p.size >= body * (p.ocr ? 1.45 : 1.15) && p.text.length <= 200 && p.lines.length <= 3 && (!p.ocr || /\p{L}{3}/u.test(p.text));
+  for (const p of paras) if (p.lines && isBig(p)) big.add(p.size);
   const ranks = [...big].sort((a, b) => b - a);
   for (let i = 0; i < paras.length; i++) {
     const p = paras[i];
     if (!p.lines || !p.text) continue;
-    if (big.has(p.size) && p.text.length <= 200 && p.lines.length <= 3) {
+    if (big.has(p.size) && isBig(p)) {
       p.outline = Math.min(5, ranks.indexOf(p.size));
     } else if (p.bold && Math.abs(p.size - body) < 0.6 && p.lines.length === 1 && p.text.length <= 90 && !/[.;,]$/.test(p.text)) {
       const next = paras[i + 1];
@@ -1034,7 +1098,8 @@ function paragraphNode(p, ctx, gap, isHF) {
   }
   if (p.lines.length >= 2) {
     const ratio = p.pitch / (size * 1.17);
-    if (ratio > 1.12 || ratio < 0.9) { spacing.line = String(Math.round(Math.max(200, Math.min(720, ratio * 240)))); spacing.lineRule = 'auto'; }
+    // no texto reconhecido a medida é aproximada: só vale espaço claramente maior, como o duplo
+    if (p.ocr ? ratio > 1.35 : ratio > 1.12 || ratio < 0.9) { spacing.line = String(Math.round(Math.max(200, Math.min(720, ratio * 240)))); spacing.lineRule = 'auto'; }
   }
   if (Object.keys(spacing).length) attrs.spacing = spacing;
   if (tabs.length) attrs.tabs = tabs;

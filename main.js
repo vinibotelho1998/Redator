@@ -864,7 +864,108 @@ ipcMain.handle('spell:add-word', async (_e, word) => {
   return true;
 });
 
-app.on('will-quit', () => { if (spellProc) { try { spellProc.kill(); } catch { /* ignora */ } } });
+app.on('will-quit', () => {
+  for (const p of [spellProc, ocrProc]) if (p) { try { p.kill(); } catch { /* ignora */ } }
+});
+
+// ---------------------------------------------------------------- reconhecimento de texto
+// PDF digitalizado: o texto das páginas é reconhecido pelo OCR do próprio
+// Windows, o mesmo do app Fotos, num processo auxiliar que fica aberto.
+
+const OCR_PS = [
+  '[Console]::InputEncoding = [Text.Encoding]::UTF8',
+  '[Console]::OutputEncoding = [Text.Encoding]::UTF8',
+  "$ErrorActionPreference = 'Stop'",
+  'Add-Type -AssemblyName System.Runtime.WindowsRuntime',
+  '$null = [Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime]',
+  '$null = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime]',
+  '$null = [Windows.Graphics.Imaging.BitmapDecoder, Windows.Foundation, ContentType = WindowsRuntime]',
+  '$null = [Windows.Globalization.Language, Windows.Foundation, ContentType = WindowsRuntime]',
+  "$asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]",
+  'function Await($op, [Type]$t) { $task = $asTask.MakeGenericMethod($t).Invoke($null, @($op)); $task.Wait(-1) | Out-Null; $task.Result }',
+  "function J([string]$s) { '\"' + ($s -replace '\\\\', '\\\\' -replace '\"', '\\\"' -replace \"[\\r\\n\\t]\", ' ') + '\"' }",
+  "$engine = $null",
+  "try { $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage([Windows.Globalization.Language]::new('pt-BR')) } catch { }",
+  'if (-not $engine) { try { $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages() } catch { } }',
+  'while ($true) {',
+  '  $p = [Console]::In.ReadLine(); if ($p -eq $null) { break }',
+  '  try {',
+  "    if (-not $engine) { throw 'sem-motor' }",
+  '    $file = Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync($p)) ([Windows.Storage.StorageFile])',
+  '    $stream = Await ($file.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])',
+  '    $decoder = Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])',
+  '    $bmp = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])',
+  '    $res = Await ($engine.RecognizeAsync($bmp)) ([Windows.Media.Ocr.OcrResult])',
+  '    $sb = New-Object System.Text.StringBuilder',
+  "    [void]$sb.Append('{\"w\":' + $bmp.PixelWidth + ',\"h\":' + $bmp.PixelHeight + ',\"lines\":[')",
+  '    $fl = $true',
+  '    foreach ($line in $res.Lines) {',
+  "      if (-not $fl) { [void]$sb.Append(',') }; $fl = $false; [void]$sb.Append('['); $fw = $true",
+  '      foreach ($w in $line.Words) {',
+  "        if (-not $fw) { [void]$sb.Append(',') }; $fw = $false; $r = $w.BoundingRect",
+  "        [void]$sb.Append('[' + (J $w.Text) + ',' + [math]::Round($r.X, 1) + ',' + [math]::Round($r.Y, 1) + ',' + [math]::Round($r.Width, 1) + ',' + [math]::Round($r.Height, 1) + ']')",
+  '      }',
+  "      [void]$sb.Append(']')",
+  '    }',
+  "    [void]$sb.Append(']}')",
+  '    $stream.Dispose()',
+  '    $o = $sb.ToString()',
+  "  } catch { $o = '{\"err\":' + (J $_.Exception.Message) + '}' }",
+  '  [Console]::Out.WriteLine($o); [Console]::Out.Flush()',
+  '}',
+].join('\n');
+
+let ocrProc = null;
+let ocrQueue = [];
+let ocrBuf = '';
+
+function startOcrHelper() {
+  if (ocrProc || process.platform !== 'win32') return;
+  try {
+    const encoded = Buffer.from(OCR_PS, 'utf16le').toString('base64');
+    ocrProc = require('child_process').spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
+  } catch { ocrProc = null; return; }
+  ocrProc.stdout.setEncoding('utf8');
+  ocrProc.stdout.on('data', (chunk) => {
+    ocrBuf += chunk;
+    let i;
+    while ((i = ocrBuf.indexOf('\n')) >= 0) {
+      const line = ocrBuf.slice(0, i).replace(/\r$/, '');
+      ocrBuf = ocrBuf.slice(i + 1);
+      const job = ocrQueue.shift();
+      if (job) job(line);
+    }
+  });
+  ocrProc.on('exit', () => { ocrProc = null; for (const j of ocrQueue) j(''); ocrQueue = []; });
+}
+
+function ocrQuery(file) {
+  startOcrHelper();
+  if (!ocrProc) return Promise.resolve('');
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(''), 90000);
+    ocrQueue.push((out) => { clearTimeout(t); resolve(out); });
+    ocrProc.stdin.write(file + '\n');
+  });
+}
+
+ipcMain.handle('ocr:image', async (_e, data, ext) => {
+  if (process.platform !== 'win32') return { err: 'O reconhecimento de texto só existe no Windows.' };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'redator-ocr-'));
+  const file = path.join(dir, 'pagina.' + (ext === 'png' ? 'png' : 'jpg'));
+  try {
+    fs.writeFileSync(file, Buffer.from(data));
+    const out = await ocrQuery(file);
+    if (!out) return { err: 'O reconhecimento de texto não respondeu.' };
+    const res = JSON.parse(out);
+    if (res.err === 'sem-motor') res.err = 'O Windows não tem o reconhecimento de texto em português instalado.';
+    return res;
+  } catch (err) {
+    return { err: err.message };
+  } finally {
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ignora */ }
+  }
+});
 
 // ---------------------------------------------------------------- fontes do sistema
 
