@@ -50,7 +50,14 @@ const FORMAT_INFO = {
   pdf: { label: 'PDF', filters: [{ name: 'PDF', extensions: ['pdf'] }] },
 };
 
-const EXT_FORMAT = { docx: 'docx', docm: 'docx', dotx: 'docx', odt: 'odt', md: 'md', markdown: 'md', txt: 'txt', text: 'txt', log: 'txt', csv: 'txt', html: 'html', htm: 'html', rtf: 'rtf', doc: 'doc', dot: 'doc', pdf: 'pdf' };
+const EXT_FORMAT = { docx: 'docx', docm: 'docx', dotx: 'docx', dotm: 'docx', odt: 'odt', md: 'md', markdown: 'md', txt: 'txt', text: 'txt', log: 'txt', csv: 'txt', html: 'html', htm: 'html', xhtml: 'html', rtf: 'rtf', doc: 'doc', dot: 'doc', pdf: 'pdf' };
+
+// arquivos de texto e de código abrem como texto puro, sem mexer nos bytes
+export const TEXT_EXTS = ['txt', 'text', 'log', 'json', 'jsonc', 'json5', 'xml', 'xsd', 'xsl', 'svg', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf', 'config', 'properties', 'env',
+  'sql', 'ps1', 'psm1', 'psd1', 'bat', 'cmd', 'sh', 'bash', 'zsh', 'py', 'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'vue', 'css', 'scss', 'sass', 'less',
+  'java', 'kt', 'kts', 'groovy', 'gradle', 'c', 'h', 'cpp', 'cc', 'hpp', 'cs', 'go', 'rs', 'php', 'rb', 'swift', 'vb', 'vbs', 'lua', 'r', 'pl', 'dart', 'scala',
+  'srt', 'vtt', 'sub', 'rst', 'adoc', 'asciidoc', 'org', 'tex', 'bib', 'diff', 'patch', 'nfo', 'reg', 'tsv', 'gitignore', 'gitattributes', 'editorconfig', 'dockerfile'];
+for (const e of TEXT_EXTS) if (!EXT_FORMAT[e]) EXT_FORMAT[e] = 'txt';
 
 const FALLBACK_FONTS = ['Arial', 'Arial Black', 'Bahnschrift', 'Calibri', 'Calibri Light', 'Cambria', 'Cambria Math', 'Candara', 'Comic Sans MS', 'Consolas', 'Constantia', 'Corbel', 'Courier New', 'Ebrima', 'Franklin Gothic Medium', 'Gabriola', 'Gadugi', 'Georgia', 'Impact', 'Ink Free', 'Lucida Console', 'Lucida Sans Unicode', 'Malgun Gothic', 'Microsoft Sans Serif', 'MV Boli', 'Palatino Linotype', 'Segoe Print', 'Segoe Script', 'Segoe UI', 'Segoe UI Light', 'Segoe UI Semibold', 'Sitka Text', 'Sylfaen', 'Symbol', 'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Webdings', 'Wingdings'];
 
@@ -65,6 +72,15 @@ function baseName(path) {
   const name = String(path || '').split(/[\\/]/).pop();
   if (/^file:/i.test(String(path))) { try { return decodeURIComponent(name); } catch { return name; } }
   return name;
+}
+
+// bytes nulos no começo, fora de UTF-16, indicam arquivo binário
+function looksBinary(bytes) {
+  const n = Math.min(bytes.length, 8192);
+  if (n >= 2 && ((bytes[0] === 0xFF && bytes[1] === 0xFE) || (bytes[0] === 0xFE && bytes[1] === 0xFF))) return false;
+  let zeros = 0;
+  for (let i = 0; i < n; i++) if (bytes[i] === 0) zeros++;
+  return zeros > n * 0.01;
 }
 
 function isPdf(bytes) {
@@ -357,7 +373,10 @@ class App {
     if (format === 'docx') res = await readDocx(bytes);
     else if (format === 'md') res = await readMarkdown(bytes, path, { host: this.host });
     else if (format === 'html') res = await readHtml(bytes, path);
-    else if (format === 'txt') res = await readText(bytes, path);
+    else if (format === 'txt') {
+      if (looksBinary(bytes)) throw new Error('"' + baseName(path) + '" não é um arquivo de texto.');
+      res = await readText(bytes, path);
+    }
     else if (format === 'odt') res = await readOdt(bytes, path);
     else if (format === 'rtf') res = await readRtf(bytes);
     else if (format === 'doc') res = await readDoc(bytes);
@@ -561,9 +580,13 @@ class App {
 
   async saveAs(ext) {
     const fmt = ext || this.defaultExt();
-    const name = stripExt(this.docName) + '.' + (fmt === 'md' ? 'md' : fmt);
+    // arquivo de código ou configuração continua com a própria extensão
+    const origExt = extOf(this.docName);
+    const keepExt = fmt === 'txt' && origExt && origExt !== 'txt' && EXT_FORMAT[origExt] === 'txt';
+    const name = keepExt ? this.docName : stripExt(this.docName) + '.' + (fmt === 'md' ? 'md' : fmt);
+    const filters = keepExt ? [{ name: 'Arquivo .' + origExt, extensions: [origExt] }, ...FORMAT_INFO.txt.filters] : (FORMAT_INFO[fmt] || FORMAT_INFO.docx).filters;
     const dir = this.filePath ? dirName(this.filePath) : this.importPath ? dirName(this.importPath) : null;
-    const path = await this.host.saveDialog({ title: 'Salvar como', defaultPath: dir ? dir + '\\' + name : name, filters: (FORMAT_INFO[fmt] || FORMAT_INFO.docx).filters });
+    const path = await this.host.saveDialog({ title: 'Salvar como', defaultPath: dir ? dir + '\\' + name : name, filters });
     if (!path) return false;
     if (extOf(path) === 'pdf') { await this.exportPdf(path); return false; }
     const realFmt = EXT_FORMAT[extOf(path)] || fmt;

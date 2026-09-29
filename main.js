@@ -8,7 +8,11 @@ const { execFile } = require('child_process');
 
 const APP_NAME = 'Redator';
 const TITLE_BAR_COLOR = '#185abd';
-const SUPPORTED = ['.docx', '.docm', '.dotx', '.doc', '.dot', '.md', '.markdown', '.txt', '.text', '.log', '.csv', '.html', '.htm', '.odt', '.rtf', '.pdf'];
+const TEXT_EXTS = ['txt', 'text', 'log', 'json', 'jsonc', 'json5', 'xml', 'xsd', 'xsl', 'svg', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf', 'config', 'properties', 'env',
+  'sql', 'ps1', 'psm1', 'psd1', 'bat', 'cmd', 'sh', 'bash', 'zsh', 'py', 'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'vue', 'css', 'scss', 'sass', 'less',
+  'java', 'kt', 'kts', 'groovy', 'gradle', 'c', 'h', 'cpp', 'cc', 'hpp', 'cs', 'go', 'rs', 'php', 'rb', 'swift', 'vb', 'vbs', 'lua', 'r', 'pl', 'dart', 'scala',
+  'srt', 'vtt', 'sub', 'rst', 'adoc', 'asciidoc', 'org', 'tex', 'bib', 'diff', 'patch', 'nfo', 'reg', 'tsv', 'gitignore', 'gitattributes', 'editorconfig', 'dockerfile'];
+const SUPPORTED = ['.docx', '.docm', '.dotx', '.dotm', '.doc', '.dot', '.md', '.markdown', '.csv', '.html', '.htm', '.xhtml', '.odt', '.rtf', '.pdf', ...TEXT_EXTS.map((e) => '.' + e)];
 
 app.setName(APP_NAME);
 if (process.platform === 'win32') app.setAppUserModelId('br.redator.app');
@@ -510,6 +514,7 @@ ipcMain.handle('file:open-dialog', async (event, opts = {}) => {
       { name: 'Markdown', extensions: ['md', 'markdown'] },
       { name: 'Página da Web', extensions: ['html', 'htm'] },
       { name: 'Texto sem formatação', extensions: ['txt', 'text', 'log', 'csv'] },
+      { name: 'Texto e código', extensions: TEXT_EXTS },
       { name: 'Rich Text', extensions: ['rtf'] },
       { name: 'PDF', extensions: ['pdf'] },
       { name: 'Todos os arquivos', extensions: ['*'] },
