@@ -97,7 +97,9 @@ export function resolveRelative(baseDir, src) {
   if (/^(https?:|data:|blob:|file:)/i.test(src)) return src;
   if (/^[a-z]:[\\/]/i.test(src) || src.startsWith('\\\\')) return fileUrl(src);
   if (!baseDir) return src;
-  const parts = (baseDir.replace(/\\/g, '/') + '/' + decodeURI(src).replace(/\\/g, '/')).split('/');
+  let rel = src;
+  try { rel = decodeURI(src); } catch { /* % solto no nome do arquivo */ }
+  const parts = (baseDir.replace(/\\/g, '/') + '/' + rel.replace(/\\/g, '/')).split('/');
   const out = [];
   for (const p of parts) {
     if (p === '..') out.pop();
