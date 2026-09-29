@@ -61,5 +61,5 @@ jobs:
           gh release delete latest --cleanup-tag --yes 2>$null
           gh release create latest "out/Redator-Setup.exe" `
             --title "Redator v${{ steps.versao.outputs.numero }}" `
-            --notes "Instalador gerado automaticamente do commit ${{ github.sha }} (versao ${{ steps.versao.outputs.numero }}). Abre e edita docx, odt, md, html e txt, exporta PDF e se registra no Abrir com do Windows. Nao exige Node nem o repositorio." `
+            --notes "Instalador gerado automaticamente do commit ${{ github.sha }} (versao ${{ steps.versao.outputs.numero }}). Abre e edita docx, doc, odt, rtf, md, html e txt, exporta PDF, recupera documentos nao salvos e se registra no Abrir com do Windows. Nao exige Node nem o repositorio." `
             --latest
