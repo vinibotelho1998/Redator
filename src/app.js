@@ -21,6 +21,7 @@ import { readMarkdown, writeMarkdown, bindMarkdownSource } from './formats/markd
 import { readHtml, writeHtml } from './formats/html.js';
 import { readText, writeText } from './formats/text.js';
 import { readOdt, writeOdt } from './formats/odt.js';
+import { readRtf, writeRtf } from './formats/rtf.js';
 import { loadImageSize, fitSize, contentWidthPx, dirName, encodeText } from './formats/common.js';
 import { PAPER_SIZES, MARGIN_PRESETS } from './model.js';
 import { h } from './ui/dom.js';
@@ -43,10 +44,11 @@ const FORMAT_INFO = {
   md: { label: 'Markdown', filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }] },
   html: { label: 'Página da Web', filters: [{ name: 'Página da Web', extensions: ['html', 'htm'] }] },
   txt: { label: 'Texto sem Formatação', filters: [{ name: 'Texto sem Formatação', extensions: ['txt'] }] },
+  rtf: { label: 'Rich Text Format', filters: [{ name: 'Rich Text Format', extensions: ['rtf'] }] },
   pdf: { label: 'PDF', filters: [{ name: 'PDF', extensions: ['pdf'] }] },
 };
 
-const EXT_FORMAT = { docx: 'docx', docm: 'docx', dotx: 'docx', odt: 'odt', md: 'md', markdown: 'md', txt: 'txt', text: 'txt', log: 'txt', csv: 'txt', html: 'html', htm: 'html' };
+const EXT_FORMAT = { docx: 'docx', docm: 'docx', dotx: 'docx', odt: 'odt', md: 'md', markdown: 'md', txt: 'txt', text: 'txt', log: 'txt', csv: 'txt', html: 'html', htm: 'html', rtf: 'rtf' };
 
 const FALLBACK_FONTS = ['Arial', 'Arial Black', 'Bahnschrift', 'Calibri', 'Calibri Light', 'Cambria', 'Cambria Math', 'Candara', 'Comic Sans MS', 'Consolas', 'Constantia', 'Corbel', 'Courier New', 'Ebrima', 'Franklin Gothic Medium', 'Gabriola', 'Gadugi', 'Georgia', 'Impact', 'Ink Free', 'Lucida Console', 'Lucida Sans Unicode', 'Malgun Gothic', 'Microsoft Sans Serif', 'MV Boli', 'Palatino Linotype', 'Segoe Print', 'Segoe Script', 'Segoe UI', 'Segoe UI Light', 'Segoe UI Semibold', 'Sitka Text', 'Sylfaen', 'Symbol', 'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Webdings', 'Wingdings'];
 
@@ -335,8 +337,8 @@ class App {
     else if (format === 'html') res = await readHtml(bytes, path);
     else if (format === 'txt') res = await readText(bytes, path);
     else if (format === 'odt') res = await readOdt(bytes, path);
+    else if (format === 'rtf') res = await readRtf(bytes);
     else if (ext === 'doc') throw new Error('O formato .doc antigo ainda não é suportado. Abra no Word ou LibreOffice e salve como .docx.');
-    else if (ext === 'rtf') throw new Error('O formato RTF ainda não é suportado.');
     else {
       // tenta descobrir pelo conteúdo
       if (bytes[0] === 0x50 && bytes[1] === 0x4b) res = await readDocx(bytes);
@@ -469,6 +471,7 @@ class App {
       case 'html': return { data: writeHtml(doc, this.model, { title: stripExt(baseName(path)) }) };
       case 'txt': return { data: writeText(doc, this.model) };
       case 'odt': return { data: await writeOdt(doc, this.model) };
+      case 'rtf': return { data: await writeRtf(doc, this.model) };
       default: throw new Error('Formato não suportado: ' + fmt);
     }
   }

@@ -140,6 +140,46 @@
       expect('txt Windows-1252 sem edição igual ao original', sameBytes(data, bytes), { original: bytes.length, gravado: data.length });
     }
 
+    // 5a. RTF no formato em que o Word grava
+    {
+      await open('word.rtf');
+      const doc = app.view.state.doc;
+      const text = doc.textBetween(0, doc.content.size, '\n', ' ');
+      const has = (s) => text.includes(s);
+      const count = (d) => {
+        const c = { outline: 0, bold: 0, red: 0, hl: 0, links: 0, bullets: 0, numbers: 0, tables: 0, images: 0, notes: 0 };
+        d.descendants((n) => {
+          if (n.type.name === 'paragraph' && n.attrs.outlineLvl === 0) c.outline++;
+          if (n.type.name === 'paragraph' && n.attrs.numId) { if (app.model.numbering.kindOf(n.attrs.numId, n.attrs.ilvl || 0) === 'bullet') c.bullets++; else c.numbers++; }
+          if (n.type.name === 'table') c.tables++;
+          if (n.type.name === 'drawing') c.images++;
+          if (n.type.name === 'footnote_ref') c.notes++;
+          if (n.isText) {
+            if (n.marks.some((m) => m.type.name === 'b' && m.attrs.val)) c.bold++;
+            if (n.marks.some((m) => m.type.name === 'color' && m.attrs.a && m.attrs.a.val === 'FF0000')) c.red++;
+            if (n.marks.some((m) => m.type.name === 'highlight')) c.hl++;
+            if (n.marks.some((m) => m.type.name === 'hyperlink' && m.attrs.href === 'https://example.com/')) c.links++;
+          }
+          return true;
+        });
+        return c;
+      };
+      const c1 = count(doc);
+      expect('rtf: texto com acentos e unicode', has('acentuação: ação, pão, você') && has('Unicode: € e …') && has('Título principal'), text.slice(0, 300));
+      expect('rtf: título, negrito, cor, realce e link', c1.outline === 1 && c1.bold >= 2 && c1.red >= 1 && c1.hl === 1 && c1.links === 1, c1);
+      expect('rtf: listas, tabela, imagem e nota de rodapé', c1.bullets === 2 && c1.numbers === 2 && c1.tables === 1 && c1.images === 1 && c1.notes === 1, c1);
+      const hdr = app.model.headerFor('header', 1, false);
+      const ftr = app.model.headerFor('footer', 1, false);
+      expect('rtf: cabeçalho e rodapé', !!hdr && /Cabeçalho de teste/.test(hdr.doc.textContent) && !!ftr && ftr.doc.textContent.includes('Página'), { hdr: hdr && hdr.doc.textContent, ftr: ftr && ftr.doc.textContent });
+      const out = await rt.writeRtf(doc, app.model);
+      const back = await rt.readRtf(new TextEncoder().encode(out));
+      const t2 = back.doc.textBetween(0, back.doc.content.size, '\n', ' ');
+      expect('rtf: ida e volta mantém o texto', t2.replace(/\s+/g, ' ').trim() === text.replace(/\s+/g, ' ').trim(), { antes: text.slice(0, 160), depois: t2.slice(0, 160) });
+      const c2 = count(back.doc);
+      expect('rtf: ida e volta mantém a estrutura', c2.outline === 1 && c2.bullets === 2 && c2.numbers === 2 && c2.tables === 1 && c2.images === 1 && c2.notes === 1 && c2.links === 1, c2);
+      const docx = await rt.writeDocx(app.model, doc, { author: 'Teste' });
+      expect('rtf salvo como docx sem XML inválido', (await rt.validateZip(docx)).length === 0);
+    }
     // 5. docx: gravar, reler e gravar de novo dá o mesmo documento
     {
       await open('nota-obsidian.md');
@@ -155,7 +195,7 @@
       await app.loadBytes(b2, FIX + 'gerado.docx', false);
       app.layout.runNow(8);
       expect('docx gerado abre e pagina', app.layout.pageCount >= 1 && app.view.state.doc.childCount > 20, { paginas: app.layout.pageCount });
-      for (const fmt of ['odt', 'html', 'txt', 'md']) {
+      for (const fmt of ['odt', 'html', 'txt', 'md', 'rtf']) {
         try {
           const { data } = await app.serialize(fmt, FIX + 'saida.' + fmt);
           expect('exporta ' + fmt, data && data.length > 100, { tamanho: data && data.length });

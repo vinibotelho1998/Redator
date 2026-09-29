@@ -970,7 +970,9 @@ class MdWriter {
 
   paragraph(n, ctx = {}) {
     const a = n.attrs;
-    const level = this.styles.headingLevel(a.styleId || this.styles.defaultPara);
+    let level = this.styles.headingLevel(a.styleId || this.styles.defaultPara);
+    // títulos marcados só pelo nível de tópico, como os que vêm do RTF
+    if (!(level >= 1 && level <= 6) && a.outlineLvl != null && a.outlineLvl < 6) level = a.outlineLvl + 1;
     const st = this.styles.get(a.styleId);
     const name = ((st && st.name) || '').toLowerCase();
     if (!n.content.size) {

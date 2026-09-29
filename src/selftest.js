@@ -6,6 +6,7 @@ import { writeMarkdown, readMarkdown } from './formats/markdown.js';
 import { writeHtml, readHtml } from './formats/html.js';
 import { writeText, readText } from './formats/text.js';
 import { writeOdt, readOdt } from './formats/odt.js';
+import { writeRtf, readRtf } from './formats/rtf.js';
 import { R } from './editor/render.js';
 import * as C from './editor/commands.js';
 import JSZip from 'jszip';
@@ -60,7 +61,7 @@ async function validateZip(bytes) {
 
 // ganchos usados pelos roteiros de teste locais
 export const testApi = {
-  readDocx, writeDocx, readMarkdown, writeMarkdown, readHtml, writeHtml, readText, writeText, readOdt, writeOdt,
+  readDocx, writeDocx, readMarkdown, writeMarkdown, readHtml, writeHtml, readText, writeText, readOdt, writeOdt, readRtf, writeRtf,
   normalize, firstDiff, validateZip, JSZip, TextSelection,
 };
 

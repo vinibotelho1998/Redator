@@ -6,7 +6,7 @@
 
 <p align="center">
   Editor de documentos gratuito com a cara do Word.<br>
-  Abre, edita e salva <b>.docx</b>, <b>.md</b>, <b>.odt</b>, <b>.html</b> e <b>.txt</b>, e exporta <b>PDF</b>.
+  Abre, edita e salva <b>.docx</b>, <b>.md</b>, <b>.odt</b>, <b>.rtf</b>, <b>.html</b> e <b>.txt</b>, e exporta <b>PDF</b>.
 </p>
 
 <p align="center">
@@ -68,7 +68,8 @@ negrito, Ctrl+S sublinhado e Ctrl+B salvar.
 codificação, o mesmo fim de linha e as mesmas tabulações.
 
 **Leitor padrão.** O instalador registra o Redator no "Abrir com" do Windows e em
-Aplicativos padrão, para `.docx`, `.odt`, `.md` e `.txt`.
+Aplicativos padrão, para `.docx`, `.odt`, `.md`, `.rtf` e `.txt`. Como o Windows 11
+não traz mais o WordPad, ele também serve para abrir os `.rtf` que sobraram.
 
 </td>
   </tr>
@@ -83,8 +84,9 @@ Aplicativos padrão, para `.docx`, `.odt`, `.md` e `.txt`.
 | Markdown `.md` `.markdown` | ✅ | ✅ |
 | Página da Web `.html` `.htm` | ✅ | ✅ |
 | Texto `.txt` `.csv` `.log` | ✅ | ✅ |
+| Rich Text `.rtf` | ✅ | ✅ |
 | PDF | | ✅ |
-| Word 97-2003 `.doc` e Rich Text `.rtf` | em breve | em breve |
+| Word 97-2003 `.doc` | em breve | |
 
 ## Instalação
 
@@ -118,8 +120,10 @@ exemplo em `tests/fixtures`:
 - `.md` editado mudando só as linhas editadas, e relido com a mesma estrutura;
 - propriedades, callouts, `[[links]]` e anexos do Obsidian;
 - `.txt` em Windows-1252 com tabulações voltando igual;
+- `.rtf` no formato do Word com acentos, listas, tabela, imagem, link, nota de
+  rodapé, cabeçalho e rodapé, e a ida e volta mantendo texto e estrutura;
 - `.docx` gravado sem XML inválido e estável em ida e volta;
-- exportação para `.odt`, `.html`, `.txt` e `.md`;
+- exportação para `.odt`, `.html`, `.txt`, `.md` e `.rtf`;
 - paginação e digitação num documento longo;
 - botões da faixa de opções e caixas de diálogo sem erro.
 

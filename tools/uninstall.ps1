@@ -5,7 +5,7 @@ Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
 Remove-Item (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Redator.lnk') -ErrorAction SilentlyContinue
 Remove-Item (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Redator.lnk') -ErrorAction SilentlyContinue
 $classes = 'HKCU:\Software\Classes'
-foreach ($ext in '.docx', '.docm', '.dotx', '.odt', '.md', '.markdown', '.txt') {
+foreach ($ext in '.docx', '.docm', '.dotx', '.odt', '.md', '.markdown', '.txt', '.rtf') {
   Remove-Item -Recurse -Force "$classes\Redator$ext" -ErrorAction SilentlyContinue
   Remove-ItemProperty -Path "$classes\$ext\OpenWithProgids" -Name "Redator$ext" -ErrorAction SilentlyContinue
 }
