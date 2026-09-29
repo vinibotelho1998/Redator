@@ -23,6 +23,7 @@ import { readText, writeText } from './formats/text.js';
 import { readOdt, writeOdt } from './formats/odt.js';
 import { readRtf, writeRtf } from './formats/rtf.js';
 import { readDoc } from './formats/doc.js';
+import { readPdf } from './formats/pdf.js';
 import { loadImageSize, fitSize, contentWidthPx, dirName, encodeText } from './formats/common.js';
 import { PAPER_SIZES, MARGIN_PRESETS } from './model.js';
 import { h } from './ui/dom.js';
@@ -49,7 +50,7 @@ const FORMAT_INFO = {
   pdf: { label: 'PDF', filters: [{ name: 'PDF', extensions: ['pdf'] }] },
 };
 
-const EXT_FORMAT = { docx: 'docx', docm: 'docx', dotx: 'docx', odt: 'odt', md: 'md', markdown: 'md', txt: 'txt', text: 'txt', log: 'txt', csv: 'txt', html: 'html', htm: 'html', rtf: 'rtf', doc: 'doc', dot: 'doc' };
+const EXT_FORMAT = { docx: 'docx', docm: 'docx', dotx: 'docx', odt: 'odt', md: 'md', markdown: 'md', txt: 'txt', text: 'txt', log: 'txt', csv: 'txt', html: 'html', htm: 'html', rtf: 'rtf', doc: 'doc', dot: 'doc', pdf: 'pdf' };
 
 const FALLBACK_FONTS = ['Arial', 'Arial Black', 'Bahnschrift', 'Calibri', 'Calibri Light', 'Cambria', 'Cambria Math', 'Candara', 'Comic Sans MS', 'Consolas', 'Constantia', 'Corbel', 'Courier New', 'Ebrima', 'Franklin Gothic Medium', 'Gabriola', 'Gadugi', 'Georgia', 'Impact', 'Ink Free', 'Lucida Console', 'Lucida Sans Unicode', 'Malgun Gothic', 'Microsoft Sans Serif', 'MV Boli', 'Palatino Linotype', 'Segoe Print', 'Segoe Script', 'Segoe UI', 'Segoe UI Light', 'Segoe UI Semibold', 'Sitka Text', 'Sylfaen', 'Symbol', 'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Webdings', 'Wingdings'];
 
@@ -64,6 +65,10 @@ function baseName(path) {
   const name = String(path || '').split(/[\\/]/).pop();
   if (/^file:/i.test(String(path))) { try { return decodeURIComponent(name); } catch { return name; } }
   return name;
+}
+
+function isPdf(bytes) {
+  return bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
 }
 
 function stripExt(name) {
@@ -356,16 +361,19 @@ class App {
     else if (format === 'odt') res = await readOdt(bytes, path);
     else if (format === 'rtf') res = await readRtf(bytes);
     else if (format === 'doc') res = await readDoc(bytes);
+    else if (format === 'pdf') res = await this.readPdfBytes(bytes, path);
     else {
       // tenta descobrir pelo conteúdo
       if (bytes[0] === 0x50 && bytes[1] === 0x4b) res = await readDocx(bytes);
       else if (bytes[0] === 0xD0 && bytes[1] === 0xCF) res = await readDoc(bytes);
+      else if (isPdf(bytes)) res = await this.readPdfBytes(bytes, path);
       else res = await readText(bytes, path);
     }
-    // o .doc antigo abre em modo de compatibilidade: salvar grava um .docx novo
-    const compat = format === 'doc' || (!format && bytes[0] === 0xD0 && bytes[1] === 0xCF);
+    // .doc antigo e PDF abrem convertidos: salvar grava um .docx novo ao lado
+    const kind = format === 'doc' || format === 'pdf' ? format : !format && bytes[0] === 0xD0 && bytes[1] === 0xCF ? 'doc' : !format && isPdf(bytes) ? 'pdf' : null;
+    const compat = !!kind;
     this.setDocument(res.model, res.doc, { path: compat ? null : path, format: compat ? 'docx' : format || 'txt', name: baseName(path) });
-    if (compat) { this.importPath = path; this.pristine = false; this.updateTitle(); }
+    if (compat) { this.importPath = path; this.importKind = kind; this.pristine = false; this.updateTitle(); }
     this.readOnly = !!readonly;
     if (readonly) this.setInfo('Somente leitura');
     this.host.setDocState({ filePath: path, addRecent: true });
@@ -375,6 +383,15 @@ class App {
     }
   }
 
+  async readPdfBytes(bytes, path) {
+    const name = baseName(path);
+    return readPdf(bytes, {
+      onProgress: (n, total) => { if (total > 3) this.setBusy('Abrindo ' + name + '... página ' + n + ' de ' + total); },
+      askPassword: (retry) => D.passwordDialog(name, retry),
+      fonts: this.systemFonts,
+    });
+  }
+
   setDocument(model, doc, opts) {
     if (this.hfEdit) this.closeHeaderFooter(true);
     if (this.view) { this.view.destroy(); this.view = null; }
@@ -382,6 +399,7 @@ class App {
     R.model = model;
     this.filePath = opts.path || null;
     this.importPath = null;
+    this.importKind = null;
     this.format = opts.format || 'docx';
     this.docName = opts.name || 'Documento1';
     this.dirty = false;
@@ -434,7 +452,7 @@ class App {
   updateTitle() {
     const name = this.docName;
     this.titleText.textContent = name + ' - Redator';
-    this.titleState.textContent = this.recovered ? '• Recuperado' : this.dirty ? '• Não salvo' : this.filePath ? '• Salvo neste PC' : this.importPath ? '• Modo de compatibilidade' : '';
+    this.titleState.textContent = this.recovered ? '• Recuperado' : this.dirty ? '• Não salvo' : this.filePath ? '• Salvo neste PC' : this.importPath ? (this.importKind === 'pdf' ? '• Convertido de PDF' : '• Modo de compatibilidade') : '';
     this.host.setDocState({ title: (this.dirty ? '* ' : '') + name + ' - Redator', dirty: this.dirty, filePath: this.filePath || this.importPath || null });
   }
 
@@ -547,6 +565,7 @@ class App {
     const dir = this.filePath ? dirName(this.filePath) : this.importPath ? dirName(this.importPath) : null;
     const path = await this.host.saveDialog({ title: 'Salvar como', defaultPath: dir ? dir + '\\' + name : name, filters: (FORMAT_INFO[fmt] || FORMAT_INFO.docx).filters });
     if (!path) return false;
+    if (extOf(path) === 'pdf') { await this.exportPdf(path); return false; }
     const realFmt = EXT_FORMAT[extOf(path)] || fmt;
     return this.writeTo(path, realFmt);
   }
@@ -670,10 +689,10 @@ class App {
     try { await this.host.print(); } finally { await this.restoreAfterPrint(); }
   }
 
-  async exportPdf() {
+  async exportPdf(target) {
     const name = stripExt(this.docName) + '.pdf';
     const dir = this.filePath ? dirName(this.filePath) : this.importPath ? dirName(this.importPath) : null;
-    const path = await this.host.saveDialog({ title: 'Publicar como PDF', defaultPath: dir ? dir + '\\' + name : name, filters: FORMAT_INFO.pdf.filters });
+    const path = typeof target === 'string' ? target : await this.host.saveDialog({ title: 'Publicar como PDF', defaultPath: dir ? dir + '\\' + name : name, filters: FORMAT_INFO.pdf.filters });
     if (!path) return;
     await this.preparePrint();
     let res;

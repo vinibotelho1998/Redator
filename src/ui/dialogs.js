@@ -196,6 +196,19 @@ export function messageBox(title, text, buttons = [{ label: 'OK', primary: true 
   return new Dialog(title, body, buttons, { className: 'dlg-msg', cancelValue: opts.cancelValue }).open();
 }
 
+// senha de um PDF protegido; devolve null quando a pessoa cancela
+export function passwordDialog(name, retry) {
+  const input = textInput('', { width: '100%' });
+  input.type = 'password';
+  const body = h('div', {},
+    h('p', { class: 'dlg-p', text: (retry ? 'Senha incorreta. ' : '') + '"' + name + '" é protegido por senha.' }),
+    field('Senha:', input));
+  return new Dialog('Senha do Documento', body, [
+    { label: 'OK', primary: true, run: (d) => { d.close(input.value); return false; } },
+    { label: 'Cancelar', value: null },
+  ], { className: 'dlg-link', cancelValue: null }).open();
+}
+
 export function confirmSave(name) {
   return messageBox('Redator', 'Deseja salvar as alterações em "' + name + '"?\nSe você não salvar, as alterações serão perdidas.', [
     { label: 'Salvar', primary: true, value: 'save' },

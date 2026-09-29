@@ -143,6 +143,28 @@
       expect('txt salvo como docx leva o estilo de texto simples', stylesXml.includes('w:styleId="PlainTextNotepad"'));
     }
 
+    // 3b. PDF: vira documento editável com títulos, tabela, imagem e lista, na ordem de leitura
+    {
+      const { p } = await open('relatorio.pdf');
+      const doc = app.view.state.doc;
+      const text = doc.textBetween(0, doc.content.size, '\n', ' ');
+      let heads = 0, tables = 0, imgs = 0, bullets = 0, rows = 0, cells = 0, shaded = 0;
+      doc.descendants((n) => {
+        if (n.type.name === 'paragraph' && n.attrs.outlineLvl != null) heads++;
+        if (n.type.name === 'table') { tables++; rows += n.childCount; n.forEach((r) => { cells += r.childCount; r.forEach((c) => { if (c.attrs.shd) shaded++; }); }); }
+        if (n.type.name === 'drawing') imgs++;
+        if (n.type.name === 'paragraph' && n.attrs.numId) bullets++;
+        return true;
+      });
+      const at = (s) => text.indexOf(s);
+      expect('pdf: texto na ordem de leitura', at('Relatório de Atividades') >= 0 && at('Relatório de Atividades') < at('Indicadores do trimestre') && at('Indicadores do trimestre') < at('Próximos passos'), text.slice(0, 200));
+      expect('pdf: títulos, tabela 5x4 com cores, gráfico e lista', heads >= 4 && tables === 1 && rows === 5 && cells === 20 && shaded >= 8 && imgs === 1 && bullets === 3, { heads, tables, rows, cells, shaded, imgs, bullets });
+      expect('pdf: abre convertido e salvar pede um .docx', app.format === 'docx' && !app.filePath && app.importPath === p && app.importKind === 'pdf', { format: app.format, importPath: app.importPath });
+      const docx = await rt.writeDocx(app.model, doc, { author: 'Teste' });
+      expect('pdf salvo como docx sem XML inválido', (await rt.validateZip(docx)).length === 0);
+      app.pristine = true; app.dirty = false; app.filePath = null; app.importPath = null;
+    }
+
     // 4a. Página salva da web: só o conteúdo
     {
       await open('pagina-salva.html');

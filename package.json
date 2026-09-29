@@ -2,7 +2,7 @@
   "name": "redator",
   "productName": "Redator",
   "version": "1.0.6",
-  "description": "Editor de documentos com a cara do Word: docx, md, odt, html, txt e PDF",
+  "description": "Editor de documentos com a cara do Word: docx, doc, pdf, odt, rtf, md, html e txt",
   "main": "main.js",
   "private": true,
   "author": "Vinicius Botelho",
@@ -22,6 +22,7 @@
   "dependencies": {
     "jszip": "^3.10.2",
     "markdown-it": "^15.0.2",
+    "pdfjs-dist": "^6.3.289",
     "prosemirror-commands": "^1.7.2",
     "prosemirror-dropcursor": "^1.8.4",
     "prosemirror-gapcursor": "^1.4.1",

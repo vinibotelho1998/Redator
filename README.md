@@ -45,6 +45,12 @@ páginas.
 **Corretor do Windows.** O sublinhado e as sugestões vêm do dicionário do próprio
 sistema, em português, no clique com o botão direito.
 
+**PDF que dá para editar.** Abre PDF como documento editável, igual o Word faz:
+parágrafos, títulos com nível de estrutura, fontes, cores, links, listas, imagens e
+tabelas com as bordas e o sombreamento, e o cabeçalho e o rodapé repetidos em cada
+página voltam para o cabeçalho e o rodapé do documento, com o número da página.
+Slides aparecem como imagens fiéis. Salvar grava um `.docx` ao lado do PDF.
+
 **PDF e impressão.** Exporta PDF com as mesmas quebras de página da tela e imprime
 pela janela de impressão do Windows.
 
@@ -73,7 +79,7 @@ negrito, Ctrl+S sublinhado e Ctrl+B salvar.
 codificação, o mesmo fim de linha e as mesmas tabulações.
 
 **Leitor padrão.** O instalador registra o Redator no "Abrir com" do Windows e em
-Aplicativos padrão, para `.docx`, `.doc`, `.odt`, `.md`, `.rtf` e `.txt`. Como o Windows 11
+Aplicativos padrão, para `.docx`, `.doc`, `.pdf`, `.odt`, `.md`, `.rtf` e `.txt`. Como o Windows 11
 não traz mais o WordPad, ele também serve para abrir os `.rtf` que sobraram.
 
 </td>
@@ -91,7 +97,7 @@ não traz mais o WordPad, ele também serve para abrir os `.rtf` que sobraram.
 | Texto `.txt` `.csv` `.log` | ✅ | ✅ |
 | Rich Text `.rtf` | ✅ | ✅ |
 | Word 97-2003 `.doc` | ✅ | como `.docx` |
-| PDF | | ✅ |
+| PDF `.pdf` | ✅ editável | ✅ |
 
 O `.doc` antigo abre em modo de compatibilidade, com títulos numerados, listas,
 tabelas com células mescladas, imagens, links, sumário, notas de rodapé e
@@ -132,6 +138,8 @@ exemplo em `tests/fixtures`:
 - `.txt` em Windows-1252 com tabulações voltando igual, e salvo como `.docx` com
   o estilo de texto simples;
 - página da web salva abrindo sem botões, scripts e partes escondidas;
+- PDF convertido na ordem de leitura, com títulos, tabela com as cores, gráfico e
+  lista, e salvo como `.docx` válido;
 - `.rtf` no formato do Word com acentos, listas, tabela, imagem, link, nota de
   rodapé, cabeçalho e rodapé, e a ida e volta mantendo texto e estrutura;
 - recuperação automática devolvendo `.md`, `.rtf` e `.txt` com a edição, e a
