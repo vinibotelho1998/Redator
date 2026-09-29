@@ -1,0 +1,10 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# arquivos de teste precisam chegar byte a byte, com o fim de linha e a codificação originais
+tests/fixtures/** -text
+
+# o Inno Setup e o cmd.exe leem melhor com CRLF
+*.iss text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf

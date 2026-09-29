@@ -1,0 +1,41 @@
+{
+  "name": "redator",
+  "productName": "Redator",
+  "version": "1.0.0",
+  "description": "Editor de documentos com a cara do Word: docx, md, odt, html, txt e PDF",
+  "main": "main.js",
+  "private": true,
+  "author": "Vinicius Botelho",
+  "license": "MIT",
+  "homepage": "https://github.com/vinibotelho1998/Redator",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vinibotelho1998/Redator.git"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node build.mjs && electron .",
+    "test": "node tests/rodar.mjs",
+    "package": "node build.mjs --minify && node tools/package.mjs",
+    "setup": "powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build.ps1"
+  },
+  "dependencies": {
+    "jszip": "^3.10.2",
+    "markdown-it": "^15.0.2",
+    "prosemirror-commands": "^1.7.2",
+    "prosemirror-dropcursor": "^1.8.4",
+    "prosemirror-gapcursor": "^1.4.1",
+    "prosemirror-history": "^1.5.0",
+    "prosemirror-keymap": "^1.2.3",
+    "prosemirror-model": "^1.25.12",
+    "prosemirror-state": "^1.4.4",
+    "prosemirror-tables": "^1.8.5",
+    "prosemirror-transform": "^1.12.2",
+    "prosemirror-view": "^1.42.6"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^44.4.5",
+    "esbuild": "^0.28.2"
+  }
+}

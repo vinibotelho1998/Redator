@@ -1,0 +1,268 @@
+/* Renderização do documento: páginas, parágrafos, tabelas e objetos. */
+@layer base, docdefaults, tablestyle, parastyle, charstyle;
+
+@layer base {
+  .doc-body {
+    color: #000;
+    font-family: "Times New Roman", serif;
+    font-size: 10pt;
+    --lf: 1.15;
+    --lh: 1;
+    font-kerning: none;
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0;
+    text-rendering: optimizeLegibility;
+    overflow-wrap: break-word;
+    tab-size: 4;
+  }
+  .doc-body p {
+    margin: 0;
+    padding: 0;
+    position: relative;
+    white-space: pre-wrap;
+    min-height: 0;
+    orphans: 1;
+    widows: 1;
+  }
+  .doc-body table.tbl {
+    --tb-top: none; --tb-left: none; --tb-bottom: none; --tb-right: none; --tb-insideH: none; --tb-insideV: none;
+    --tc-top: 0pt; --tc-bottom: 0pt; --tc-left: 5.4pt; --tc-right: 5.4pt;
+    border-collapse: collapse;
+    border-spacing: 0;
+    table-layout: fixed;
+    margin: 0;
+  }
+  .doc-body td {
+    border-top: var(--tb-insideH, none);
+    border-bottom: var(--tb-insideH, none);
+    border-left: var(--tb-insideV, none);
+    border-right: var(--tb-insideV, none);
+    padding: var(--tc-top, 0) var(--tc-right, 5.4pt) var(--tc-bottom, 0) var(--tc-left, 5.4pt);
+    vertical-align: top;
+    position: relative;
+    box-sizing: border-box;
+    overflow-wrap: break-word;
+  }
+  .doc-body td.r-first { border-top: var(--tb-top, none); }
+  .doc-body td.r-last { border-bottom: var(--tb-bottom, none); }
+  .doc-body td.c-first { border-left: var(--tb-left, none); }
+  .doc-body td.c-last { border-right: var(--tb-right, none); }
+}
+
+@layer tablestyle {
+  .doc-body .dark-bg { color: #fff; --auto-color: #fff; }
+}
+
+/* altura de linha do Word: fator da fonte vezes o múltiplo, ou valor exato */
+.doc-body p,
+.doc-body p span,
+.doc-body p a,
+.doc-body p ins,
+.doc-body p sup { line-height: var(--lhx, calc(var(--lf, 1.22) * var(--lh, 1))); }
+
+/* "não adicionar espaço entre parágrafos do mesmo estilo" */
+.doc-body p.ctx-after { padding-bottom: 0 !important; }
+.doc-body p.ctx-before { padding-top: 0 !important; }
+.doc-body p.ctx-after-m { margin-bottom: 0 !important; }
+.doc-body p.ctx-before-m { margin-top: 0 !important; }
+
+.doc-body .tbl-wrap { position: relative; }
+.doc-body td.phantom { border: none !important; background: transparent !important; }
+.doc-body td > p:last-child { margin-bottom: 0; }
+.doc-body tr.pb-row > td { border: none !important; padding: 0 !important; background: transparent !important; }
+
+/* tabulações */
+.doc-body .tab { display: inline-block; width: 0; height: 1em; vertical-align: baseline; white-space: pre; }
+.doc-body .tab[data-leader="dot"],
+.doc-body .tab[data-leader="middleDot"] {
+  background-image: radial-gradient(circle at center, currentColor 0.55px, transparent 0.9px);
+  background-size: 3.4px 3px;
+  background-repeat: repeat-x;
+  background-position: 1px calc(100% - 0.12em);
+}
+.doc-body .tab[data-leader="middleDot"] { background-position: 1px 60%; }
+.doc-body .tab[data-leader="hyphen"] {
+  background-image: linear-gradient(90deg, currentColor 50%, transparent 50%);
+  background-size: 5px 1px;
+  background-repeat: repeat-x;
+  background-position: 0 60%;
+}
+.doc-body .tab[data-leader="underscore"],
+.doc-body .tab[data-leader="heavy"] { box-shadow: inset 0 -1px 0 currentColor; }
+
+/* numeração */
+.doc-body .num-lbl { white-space: pre; user-select: none; -webkit-user-select: none; }
+.doc-body .num-tab { display: inline-block; height: 1px; }
+
+/* sobrescrito e subscrito sem alterar a altura da linha */
+.doc-body .sup { position: relative; top: -0.5em; font-size: 65%; }
+.doc-body .sub { position: relative; top: 0.25em; font-size: 65%; }
+.doc-body sup.fnref { vertical-align: baseline; font-size: inherit; }
+.doc-body.pm-root { counter-reset: fn en; }
+.doc-body sup.fnref-footnote { counter-increment: fn; }
+.doc-body sup.fnref-footnote::after { content: counter(fn); }
+.doc-body sup.fnref-endnote { counter-increment: en; }
+.doc-body sup.fnref-endnote::after { content: counter(en, lower-roman); }
+
+/* links */
+.doc-body a.lnk { color: inherit; text-decoration: inherit; cursor: text; }
+.pm-root.link-hover a.lnk { cursor: pointer; }
+
+/* marcas ocultas e campos */
+.doc-body .vanish { display: none; }
+.doc-body .fc, .doc-body .fi { display: inline; }
+.doc-body .oi { display: inline; }
+.doc-body .oi-del { display: none; }
+.doc-body.show-markup .oi-del { display: inline; color: #b0228c; text-decoration: line-through; }
+.doc-body.show-markup .trk-ins { color: #b0228c; text-decoration: underline; }
+.doc-body .trk-ins { text-decoration: none; }
+.doc-body .oi-math { font-family: "Cambria Math", Cambria, serif; font-style: italic; }
+.doc-body .oi-commentRef::after {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 11px;
+  margin: 0 1px;
+  vertical-align: 0.35em;
+  background: #fce8a4;
+  border: 1px solid #d4a017;
+  border-radius: 2px;
+  cursor: help;
+}
+.doc-body .oi-noteMark { vertical-align: super; font-size: 70%; }
+
+/* quebra de página */
+.doc-body .pgbrk { display: inline; }
+
+/* desenhos e imagens */
+.doc-body .drw-wrap { display: inline-block; vertical-align: baseline; position: relative; line-height: 0; text-indent: 0; }
+.doc-body .drw-wrap[data-mode="block"] { display: block; }
+.doc-body .drw-wrap[data-mode="absolute"] { position: absolute; }
+.doc-body .drw-box { display: inline-block; position: relative; line-height: normal; vertical-align: bottom; }
+.doc-body .drw-box img { width: 100%; height: 100%; display: block; }
+.doc-body .drw-box img:not([style]) { max-width: 100%; }
+.doc-body .drw-shapebox { box-sizing: border-box; padding: 3.6pt 7.2pt; overflow: hidden; vertical-align: top; }
+.doc-body .drw-text { line-height: normal; }
+.doc-body .drw-label { font: 11px "Segoe UI", sans-serif; color: #777; display: flex; align-items: center; justify-content: center; height: 100%; min-height: 40px; background: repeating-linear-gradient(45deg, #fafafa, #fafafa 6px, #f0f0f0 6px, #f0f0f0 12px); border: 1px dashed #bbb; box-sizing: border-box; }
+.doc-body .drw-hr { border-top: 1.5px solid #a0a0a0; margin: 4px 0; }
+.drw-wrap.selected .drw-box { outline: 1px solid #3a7bd5; }
+.drw-handle { display: none; position: absolute; width: 8px; height: 8px; background: #fff; border: 1px solid #555; box-sizing: border-box; z-index: 5; }
+.drw-wrap.selected .drw-handle { display: block; }
+.drw-h-nw { left: -4px; top: -4px; cursor: nwse-resize; }
+.drw-h-n { left: calc(50% - 4px); top: -4px; cursor: ns-resize; }
+.drw-h-ne { right: -4px; top: -4px; cursor: nesw-resize; }
+.drw-h-e { right: -4px; top: calc(50% - 4px); cursor: ew-resize; }
+.drw-h-se { right: -4px; bottom: -4px; cursor: nwse-resize; }
+.drw-h-s { left: calc(50% - 4px); bottom: -4px; cursor: ns-resize; }
+.drw-h-sw { left: -4px; bottom: -4px; cursor: nesw-resize; }
+.drw-h-w { left: -4px; top: calc(50% - 4px); cursor: ew-resize; }
+
+/* blocos preservados */
+.doc-body .opaque-block { border: 1px dashed #bbb; color: #666; font: 9pt "Segoe UI", sans-serif; padding: 4px 6px; margin: 2px 0; white-space: pre-wrap; background: #fafafa; }
+.doc-body .opaque-block.ob-md { font: 9pt Consolas, "Courier New", monospace; color: #8a8a99; border-color: #dcdce4; background: #f8f8fa; margin: 4px 0; }
+
+/* callouts do Obsidian: > [!info] Título */
+.doc-body p.callout {
+  --co: #086ddd;
+  background: color-mix(in srgb, var(--co) 8%, transparent);
+  border: 0;
+  border-left: 3px solid var(--co);
+  margin-left: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding: 2px 10px 4px 12px;
+  color: #1f1f1f;
+}
+.doc-body p.callout-head { font-weight: 600; color: var(--co); padding-top: 6px; }
+.doc-body p.callout-head::before { content: attr(data-icon) "\00a0\00a0"; font-weight: normal; }
+.doc-body p.callout-head[data-label]::before { content: attr(data-icon) "\00a0\00a0" attr(data-label); font-weight: 600; }
+.doc-body p.callout:not(:has(+ p.callout)) { padding-bottom: 6px; margin-bottom: 8pt; }
+/* callouts seguidos ficam separados */
+.doc-body p.callout:has(+ p.callout-head) { padding-bottom: 6px; margin-bottom: 8pt; }
+.doc-body p.co-blue { --co: #086ddd; }
+.doc-body p.co-cyan { --co: #00a0a0; }
+.doc-body p.co-green { --co: #08a045; }
+.doc-body p.co-orange { --co: #d97000; }
+.doc-body p.co-red { --co: #e93147; }
+.doc-body p.co-purple { --co: #7852ee; }
+.doc-body p.co-gray { --co: #8a8a8a; }
+
+/* realce da pesquisa */
+.doc-body .find-hit { background: #fff3a0; }
+.doc-body .find-hit.find-cur { background: #ffb74d; }
+
+/* ProseMirror */
+.ProseMirror { position: relative; word-wrap: break-word; white-space: pre-wrap; -webkit-font-variant-ligatures: none; font-variant-ligatures: none; outline: none; caret-color: #000; }
+.ProseMirror-hideselection *::selection { background: transparent; }
+.ProseMirror-hideselection *::-moz-selection { background: transparent; }
+.ProseMirror-hideselection { caret-color: transparent; }
+.ProseMirror [draggable][contenteditable=false] { user-select: text; }
+.ProseMirror-selectednode { outline: none; }
+.ProseMirror .drw-wrap.ProseMirror-selectednode .drw-box { outline: 1px solid #3a7bd5; }
+img.ProseMirror-separator { display: inline !important; border: none !important; margin: 0 !important; }
+.ProseMirror-gapcursor { display: none; pointer-events: none; position: absolute; }
+.ProseMirror-gapcursor::after { content: ""; display: block; position: absolute; top: -2px; width: 20px; border-top: 1px solid black; animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite; }
+@keyframes ProseMirror-cursor-blink { to { visibility: hidden; } }
+.ProseMirror-focused .ProseMirror-gapcursor { display: block; }
+.ProseMirror .column-resize-handle { position: absolute; right: -2px; top: 0; bottom: -2px; width: 4px; z-index: 20; background-color: #7ba6e8; pointer-events: none; }
+.ProseMirror.resize-cursor { cursor: col-resize; }
+.ProseMirror .selectedCell::after { z-index: 2; position: absolute; content: ""; left: 0; right: 0; top: 0; bottom: 0; background: rgba(90, 140, 220, 0.22); pointer-events: none; }
+.pm-root ::selection { background: rgba(40, 110, 220, 0.28); }
+
+/* marcas de formatação (¶) */
+.show-marks .doc-body p:not(:has(> br.ProseMirror-trailingBreak:only-child))::after { content: "¶"; color: #4a74c9; font-family: Calibri, sans-serif; font-weight: normal; font-style: normal; text-decoration: none; }
+.show-marks .doc-body p:has(> br.ProseMirror-trailingBreak:only-child)::before { content: "¶"; color: #4a74c9; font-family: Calibri, sans-serif; }
+.show-marks .doc-body .tab { position: relative; }
+.show-marks .doc-body .tab::before { content: "→"; position: absolute; left: 50%; transform: translateX(-50%); bottom: 0.1em; color: #4a74c9; font-family: Calibri, sans-serif; font-size: 0.9em; line-height: 1; }
+.show-marks .doc-body .vanish { display: inline; text-decoration: underline dotted #4a74c9; }
+.show-marks .doc-body .pgbrk::before { content: "·························Quebra de Página·························"; color: #4a74c9; font: 9pt Calibri, sans-serif; white-space: nowrap; }
+.show-marks .doc-body .oi-bookmarkStart::before { content: "["; color: #888; }
+.show-marks .doc-body .oi-bookmarkEnd::before { content: "]"; color: #888; }
+
+/* páginas */
+.doc-canvas { position: relative; }
+.doc-zoom { position: absolute; transform-origin: 0 0; }
+.pages-layer { position: absolute; left: 0; top: 0; z-index: 0; }
+.page { position: absolute; left: 0; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.16); }
+.page-header, .page-footer, .page-notes { position: absolute; overflow: visible; }
+.page-header.empty, .page-footer.empty { pointer-events: none; }
+.page-notes .fn-sep { width: 144pt; height: 0; border-top: 0.75pt solid #000; margin: 9px 0 9px; }
+.page-notes .static-doc > p { padding-bottom: 0; }
+.editor-host { position: absolute; top: 0; z-index: 1; box-sizing: border-box; pointer-events: none; }
+.editor-host > .pm-root { pointer-events: auto; min-height: 20px; }
+.pb { pointer-events: none; user-select: none; }
+.pb-inline { display: block; }
+.doc-body .measure, .measure { position: absolute; left: 0; top: 0; visibility: hidden; pointer-events: none; }
+
+/* edição de cabeçalho e rodapé */
+.hf-editing .editor-host { opacity: 0.45; pointer-events: none !important; }
+.hf-editing .editor-host > .pm-root { pointer-events: none !important; }
+.hf-editing .page-header:not(.editing), .hf-editing .page-footer:not(.editing) { opacity: 0.6; }
+.page-header.editing, .page-footer.editing { outline: 1px dashed #2b7cd3; outline-offset: 2px; min-height: 18px; z-index: 3; }
+.hf-tag { position: absolute; left: 6px; font: 11px "Segoe UI", sans-serif; background: #e7f0fb; color: #1d4e8f; border: 1px solid #9dbde8; padding: 1px 6px; z-index: 4; }
+.hf-editor { outline: none; }
+
+/* modos de exibição */
+.mode-web .pages-layer { display: none; }
+.mode-web .doc-zoom { position: relative !important; left: auto !important; top: auto !important; transform: none !important; width: auto !important; margin: 16px; }
+.mode-web .editor-host { position: relative; left: auto !important; width: auto !important; padding: 36px 48px 60px !important; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.12); min-height: calc(100vh - 260px); }
+.mode-web .doc-canvas { height: auto !important; min-width: 0 !important; }
+.mode-read .editor-host { max-width: 780px; margin: 0 auto; padding: 48px 64px 80px !important; }
+.mode-read .doc-scroll { background: #f5f3ee; }
+
+/* impressão */
+@media print {
+  html.printing, html.printing body { background: #fff !important; overflow: visible !important; height: auto !important; }
+  html.printing .titlebar, html.printing .ribbon-wrap, html.printing .statusbar, html.printing .navpane,
+  html.printing .ruler, html.printing .backstage, html.printing .popup, html.printing .tooltip, html.printing .dlg-overlay, html.printing .ruler-guide { display: none !important; }
+  html.printing .app { display: block !important; height: auto !important; }
+  html.printing .workspace, html.printing .docarea { display: block !important; height: auto !important; overflow: visible !important; }
+  html.printing .doc-scroll { position: static !important; overflow: visible !important; height: auto !important; background: #fff !important; }
+  html.printing .doc-canvas { position: relative !important; min-width: 0 !important; }
+  html.printing .doc-zoom { left: 0 !important; top: 0 !important; transform: none !important; }
+  html.printing .page { box-shadow: none !important; }
+  html.printing .find-hit { background: none !important; }
+  html.printing .ProseMirror { caret-color: transparent; }
+  html.printing .drw-handle { display: none !important; }
+  html.printing .drw-wrap.selected .drw-box, html.printing .ProseMirror-selectednode .drw-box { outline: none !important; }
+}
