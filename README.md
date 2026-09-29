@@ -49,7 +49,9 @@ sistema, em português, no clique com o botão direito.
 parágrafos, títulos com nível de estrutura, fontes, cores, links, listas, imagens e
 tabelas com as bordas e o sombreamento, e o cabeçalho e o rodapé repetidos em cada
 página voltam para o cabeçalho e o rodapé do documento, com o número da página.
-Slides aparecem como imagens fiéis. Salvar grava um `.docx` ao lado do PDF.
+Slides aparecem como imagens fiéis. PDF escaneado abre como imagem e o Redator
+oferece reconhecer o texto com o OCR do próprio Windows, sem instalar nada e sem
+mandar nada para fora do PC. Salvar grava um `.docx` ao lado do PDF.
 
 **PDF e impressão.** Exporta PDF com as mesmas quebras de página da tela e imprime
 pela janela de impressão do Windows.
@@ -147,6 +149,7 @@ exemplo em `tests/fixtures`:
 - página da web salva abrindo sem botões, scripts e partes escondidas;
 - PDF convertido na ordem de leitura, com títulos, tabela com as cores, gráfico e
   lista, e salvo como `.docx` válido;
+- PDF escaneado reconhecido como imagem e, com o OCR do Windows, virando texto;
 - CSV abrindo como tabela, com aspas, separador e quebra de linha dentro da
   célula, voltando igual sem edição e mudando só a linha editada;
 - EPUB com capítulos em páginas próprias, imagens e links; página `.mht` com a
