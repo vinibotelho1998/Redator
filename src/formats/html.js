@@ -16,9 +16,18 @@ export async function readHtml(bytes, path) {
   model.properties.title = (dom.querySelector('title') || {}).textContent || '';
   const baseDir = dirName(path);
   const maxW = contentWidthPx(model);
+  // página salva da web: fica só o conteúdo, sem controles, ícones e partes escondidas
+  const junk = 'noscript,template,iframe,object,embed,canvas,audio,video,select,textarea,button,svg,dialog,[hidden],[aria-hidden="true"],input:not([type=checkbox])';
+  for (const el of Array.from(dom.body.querySelectorAll(junk))) el.remove();
+  for (const el of Array.from(dom.body.querySelectorAll('[style]'))) {
+    if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test(el.getAttribute('style'))) el.remove();
+  }
   const imgs = Array.from(dom.body.querySelectorAll('img'));
   await Promise.all(imgs.map(async (img) => {
-    const src = resolveRelative(baseDir, img.getAttribute('src'));
+    const w = Number(img.getAttribute('width')), hgt = Number(img.getAttribute('height'));
+    // pixel de rastreamento
+    if ((w && w <= 2) || (hgt && hgt <= 2)) { img.remove(); return; }
+    const src = resolveRelative(baseDir, img.getAttribute('src') || '');
     img.setAttribute('src', src);
     if (!img.getAttribute('width')) {
       const size = await loadImageSize(src, 3000);
@@ -26,6 +35,9 @@ export async function readHtml(bytes, path) {
         const { cx, cy } = fitSize(size.w, size.h, maxW);
         img.setAttribute('width', String(Math.round(cx / 9525)));
         img.setAttribute('height', String(Math.round(cy / 9525)));
+      } else if (!src || /^file:/i.test(src)) {
+        // imagem local que não existe mais: fica o texto alternativo
+        img.replaceWith(dom.createTextNode(img.getAttribute('alt') || ''));
       }
     }
   }));

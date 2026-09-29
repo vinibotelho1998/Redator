@@ -140,6 +140,18 @@
       expect('txt Windows-1252 sem edição igual ao original', sameBytes(data, bytes), { original: bytes.length, gravado: data.length });
     }
 
+    // 4a. Página salva da web: só o conteúdo
+    {
+      await open('pagina-salva.html');
+      const doc = app.view.state.doc;
+      const text = doc.textBetween(0, doc.content.size, '\n', ' ');
+      const junk = ['SEM SCRIPT', 'MENU ESCONDIDO', 'BANNER ESCONDIDO', 'BOTAO', 'CAMPO DE BUSCA', 'OPCAO', 'ICONE', 'DECORACAO', 'rastreio'].filter((s) => text.includes(s));
+      let imgs = 0, tables = 0;
+      doc.descendants((n) => { if (n.type.name === 'drawing') imgs++; if (n.type.name === 'table') tables++; return true; });
+      expect('html: página salva sem botões, scripts e partes escondidas', !junk.length && imgs === 0, { junk, imgs });
+      expect('html: conteúdo da página mantido', ['Título do artigo', 'Primeiro parágrafo com negrito e um link.', 'Segundo parágrafo.', 'Gráfico de vendas', 'Item um', 'Item marcado'].every((s) => text.includes(s)) && tables === 1, text.slice(0, 300));
+    }
+
     // 4b. AutoRecuperação: a cópia guardada volta com as alterações
     {
       const { p, bytes } = await open('readme-crlf.md');
