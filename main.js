@@ -12,6 +12,9 @@ const SUPPORTED = ['.docx', '.docm', '.dotx', '.doc', '.dot', '.md', '.markdown'
 
 app.setName(APP_NAME);
 if (process.platform === 'win32') app.setAppUserModelId('br.redator.app');
+// testes rodam com a janela escondida, sem aparecer na tela nem roubar o teclado;
+// REDATOR_TEST_SHOW=1 mostra a janela quando é preciso ver o que acontece
+const HIDDEN_TEST = !!process.env.REDATOR_TEST && !process.env.REDATOR_TEST_SHOW;
 if (process.env.REDATOR_TEST) {
   app.setPath('userData', path.join(process.env.REDATOR_TEST_OUT || os.tmpdir(), 'redator-test-profile'));
   // máquinas de CI nem sempre têm placa de vídeo
@@ -171,6 +174,8 @@ function createWindow(filePath, opts = {}) {
       nodeIntegration: false,
       sandbox: true,
       spellcheck: true,
+      // nos testes a janela fica escondida e não pode ter os relógios freados
+      backgroundThrottling: !HIDDEN_TEST,
     },
   });
 
@@ -181,6 +186,7 @@ function createWindow(filePath, opts = {}) {
   win.loadFile(path.join(__dirname, 'app', 'index.html'));
 
   win.once('ready-to-show', () => {
+    if (HIDDEN_TEST) { win.webContents.focus(); return; }
     if (b.maximized) win.maximize();
     win.show();
   });
@@ -675,7 +681,7 @@ function attachTestHarness(win) {
     const arg = rest.join(':');
     try {
       if (cmd === 'SHOT') {
-        const img = await wc.capturePage();
+        const img = await wc.capturePage(undefined, { stayHidden: true });
         fs.writeFileSync(path.join(outDir, arg), img.toPNG());
         console.log('TEST shot', arg);
       } else if (cmd === 'KEYS') {
@@ -701,10 +707,10 @@ function attachTestHarness(win) {
         wc.executeJavaScript('window.__mouseDone = (window.__mouseDone || 0) + 1', true);
       } else if (cmd === 'PDFSHOT') {
         const [pdfPath, prefix, zoom] = arg.split('|');
-        const pv = new BrowserWindow({ width: 1000, height: 1300, show: true, webPreferences: { plugins: true } });
+        const pv = new BrowserWindow({ width: 1000, height: 1300, show: !HIDDEN_TEST, webPreferences: { plugins: true, backgroundThrottling: false } });
         await pv.loadURL('file:///' + pdfPath.replace(/\\/g, '/') + '#toolbar=0&zoom=' + (zoom || 40));
         await sleep(3000);
-        const img = await pv.webContents.capturePage();
+        const img = await pv.webContents.capturePage(undefined, { stayHidden: true });
         fs.writeFileSync(path.join(outDir, prefix + '.png'), img.toPNG());
         pv.destroy();
         console.log('TEST pdfshot', prefix);
