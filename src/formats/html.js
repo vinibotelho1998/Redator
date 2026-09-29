@@ -14,39 +14,56 @@ export async function readHtml(bytes, path) {
   model.extra.text = { encoding, bom, eol };
   const dom = new DOMParser().parseFromString(text, 'text/html');
   model.properties.title = (dom.querySelector('title') || {}).textContent || '';
-  const baseDir = dirName(path);
+  const blocks = await htmlToBlocks(dom.body, model, { baseDir: dirName(path) });
+  return { model, doc: finalizeDoc(schema.node('doc', null, blocks.length ? blocks : [schema.nodes.paragraph.create()]), model) };
+}
+
+// Converte o corpo de uma página em blocos do documento. Serve também para
+// EPUB, MHT e e-mail: resolve(src) troca o endereço de cada imagem, por
+// exemplo por uma imagem guardada dentro do próprio arquivo.
+export async function htmlToBlocks(body, model, opts = {}) {
+  const baseDir = opts.baseDir || '';
   const maxW = contentWidthPx(model);
   // página salva da web: fica só o conteúdo, sem controles, ícones e partes escondidas
-  const junk = 'noscript,template,iframe,object,embed,canvas,audio,video,select,textarea,button,svg,dialog,[hidden],[aria-hidden="true"],input:not([type=checkbox])';
-  for (const el of Array.from(dom.body.querySelectorAll(junk))) el.remove();
-  for (const el of Array.from(dom.body.querySelectorAll('[style]'))) {
+  const junk = 'script,style,noscript,template,iframe,object,embed,canvas,audio,video,select,textarea,button,dialog,[hidden],[aria-hidden="true"],input:not([type=checkbox])' + (opts.keepSvg ? '' : ',svg');
+  for (const el of Array.from(body.querySelectorAll(junk))) el.remove();
+  for (const el of Array.from(body.querySelectorAll('[style]'))) {
     if (/display\s*:\s*none|visibility\s*:\s*hidden/i.test(el.getAttribute('style'))) el.remove();
   }
-  const imgs = Array.from(dom.body.querySelectorAll('img'));
+  const imgs = Array.from(body.querySelectorAll('img'));
   await Promise.all(imgs.map(async (img) => {
     const w = Number(img.getAttribute('width')), hgt = Number(img.getAttribute('height'));
     // pixel de rastreamento
     if ((w && w <= 2) || (hgt && hgt <= 2)) { img.remove(); return; }
-    const src = resolveRelative(baseDir, img.getAttribute('src') || '');
-    img.setAttribute('src', src);
+    const raw = img.getAttribute('src') || '';
+    const src = (opts.resolve && opts.resolve(raw)) || resolveRelative(baseDir, raw);
+    img.setAttribute('src', src || '');
+    // largura em porcentagem ou em estilo não serve: mede a imagem
+    if (/%/.test(img.getAttribute('width') || '')) { img.removeAttribute('width'); img.removeAttribute('height'); }
     if (!img.getAttribute('width')) {
       const size = await loadImageSize(src, 3000);
       if (size) {
         const { cx, cy } = fitSize(size.w, size.h, maxW);
         img.setAttribute('width', String(Math.round(cx / 9525)));
         img.setAttribute('height', String(Math.round(cy / 9525)));
-      } else if (!src || /^file:/i.test(src)) {
-        // imagem local que não existe mais: fica o texto alternativo
-        img.replaceWith(dom.createTextNode(img.getAttribute('alt') || ''));
+      } else if (!src || /^(file|blob):/i.test(src)) {
+        // imagem que não existe mais: fica o texto alternativo
+        img.replaceWith(body.ownerDocument.createTextNode(img.getAttribute('alt') || ''));
       }
+    } else if (Number(img.getAttribute('width')) > maxW) {
+      const k = maxW / Number(img.getAttribute('width'));
+      img.setAttribute('width', String(Math.round(maxW)));
+      if (img.getAttribute('height')) img.setAttribute('height', String(Math.round(Number(img.getAttribute('height')) * k)));
     }
   }));
   const prev = R.model;
   R.model = model;
   try {
-    normalizeExternalHTML(dom.body, { codeStyle: 'Code', quoteStyle: 'BlockQuote' });
-    const doc = PMDOMParser.fromSchema(schema).parse(dom.body);
-    return { model, doc: finalizeDoc(doc, model) };
+    normalizeExternalHTML(body, { codeStyle: 'Code', quoteStyle: 'BlockQuote' });
+    const doc = PMDOMParser.fromSchema(schema).parse(body);
+    const blocks = [];
+    doc.forEach((n) => blocks.push(n));
+    return blocks;
   } finally {
     R.model = prev;
   }
