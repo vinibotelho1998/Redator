@@ -22,6 +22,7 @@ import { readHtml, writeHtml } from './formats/html.js';
 import { readText, writeText } from './formats/text.js';
 import { readOdt, writeOdt } from './formats/odt.js';
 import { readRtf, writeRtf } from './formats/rtf.js';
+import { readDoc } from './formats/doc.js';
 import { loadImageSize, fitSize, contentWidthPx, dirName, encodeText } from './formats/common.js';
 import { PAPER_SIZES, MARGIN_PRESETS } from './model.js';
 import { h } from './ui/dom.js';
@@ -48,7 +49,7 @@ const FORMAT_INFO = {
   pdf: { label: 'PDF', filters: [{ name: 'PDF', extensions: ['pdf'] }] },
 };
 
-const EXT_FORMAT = { docx: 'docx', docm: 'docx', dotx: 'docx', odt: 'odt', md: 'md', markdown: 'md', txt: 'txt', text: 'txt', log: 'txt', csv: 'txt', html: 'html', htm: 'html', rtf: 'rtf' };
+const EXT_FORMAT = { docx: 'docx', docm: 'docx', dotx: 'docx', odt: 'odt', md: 'md', markdown: 'md', txt: 'txt', text: 'txt', log: 'txt', csv: 'txt', html: 'html', htm: 'html', rtf: 'rtf', doc: 'doc', dot: 'doc' };
 
 const FALLBACK_FONTS = ['Arial', 'Arial Black', 'Bahnschrift', 'Calibri', 'Calibri Light', 'Cambria', 'Cambria Math', 'Candara', 'Comic Sans MS', 'Consolas', 'Constantia', 'Corbel', 'Courier New', 'Ebrima', 'Franklin Gothic Medium', 'Gabriola', 'Gadugi', 'Georgia', 'Impact', 'Ink Free', 'Lucida Console', 'Lucida Sans Unicode', 'Malgun Gothic', 'Microsoft Sans Serif', 'MV Boli', 'Palatino Linotype', 'Segoe Print', 'Segoe Script', 'Segoe UI', 'Segoe UI Light', 'Segoe UI Semibold', 'Sitka Text', 'Sylfaen', 'Symbol', 'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Webdings', 'Wingdings'];
 
@@ -338,13 +339,17 @@ class App {
     else if (format === 'txt') res = await readText(bytes, path);
     else if (format === 'odt') res = await readOdt(bytes, path);
     else if (format === 'rtf') res = await readRtf(bytes);
-    else if (ext === 'doc') throw new Error('O formato .doc antigo ainda não é suportado. Abra no Word ou LibreOffice e salve como .docx.');
+    else if (format === 'doc') res = await readDoc(bytes);
     else {
       // tenta descobrir pelo conteúdo
       if (bytes[0] === 0x50 && bytes[1] === 0x4b) res = await readDocx(bytes);
+      else if (bytes[0] === 0xD0 && bytes[1] === 0xCF) res = await readDoc(bytes);
       else res = await readText(bytes, path);
     }
-    this.setDocument(res.model, res.doc, { path, format: format || 'txt', name: baseName(path) });
+    // o .doc antigo abre em modo de compatibilidade: salvar grava um .docx novo
+    const compat = format === 'doc' || (!format && bytes[0] === 0xD0 && bytes[1] === 0xCF);
+    this.setDocument(res.model, res.doc, { path: compat ? null : path, format: compat ? 'docx' : format || 'txt', name: baseName(path) });
+    if (compat) { this.importPath = path; this.pristine = false; this.updateTitle(); }
     this.readOnly = !!readonly;
     if (readonly) this.setInfo('Somente leitura');
     this.host.setDocState({ filePath: path, addRecent: true });
@@ -360,6 +365,7 @@ class App {
     this.model = model;
     R.model = model;
     this.filePath = opts.path || null;
+    this.importPath = null;
     this.format = opts.format || 'docx';
     this.docName = opts.name || 'Documento1';
     this.dirty = false;
@@ -410,8 +416,8 @@ class App {
   updateTitle() {
     const name = this.docName;
     this.titleText.textContent = name + ' - Redator';
-    this.titleState.textContent = this.dirty ? '• Não salvo' : this.filePath ? '• Salvo neste PC' : '';
-    this.host.setDocState({ title: (this.dirty ? '* ' : '') + name + ' - Redator', dirty: this.dirty, filePath: this.filePath });
+    this.titleState.textContent = this.dirty ? '• Não salvo' : this.filePath ? '• Salvo neste PC' : this.importPath ? '• Modo de compatibilidade' : '';
+    this.host.setDocState({ title: (this.dirty ? '* ' : '') + name + ' - Redator', dirty: this.dirty, filePath: this.filePath || this.importPath || null });
   }
 
   markDirty() {
@@ -438,7 +444,7 @@ class App {
   async saveAs(ext) {
     const fmt = ext || this.defaultExt();
     const name = stripExt(this.docName) + '.' + (fmt === 'md' ? 'md' : fmt);
-    const dir = this.filePath ? dirName(this.filePath) : null;
+    const dir = this.filePath ? dirName(this.filePath) : this.importPath ? dirName(this.importPath) : null;
     const path = await this.host.saveDialog({ title: 'Salvar como', defaultPath: dir ? dir + '\\' + name : name, filters: (FORMAT_INFO[fmt] || FORMAT_INFO.docx).filters });
     if (!path) return false;
     const realFmt = EXT_FORMAT[extOf(path)] || fmt;
@@ -490,6 +496,7 @@ class App {
         return false;
       }
       this.filePath = path;
+      this.importPath = null;
       this.format = fmt;
       this.docName = baseName(path);
       this.model.format = fmt;
@@ -561,7 +568,7 @@ class App {
 
   async exportPdf() {
     const name = stripExt(this.docName) + '.pdf';
-    const dir = this.filePath ? dirName(this.filePath) : null;
+    const dir = this.filePath ? dirName(this.filePath) : this.importPath ? dirName(this.importPath) : null;
     const path = await this.host.saveDialog({ title: 'Publicar como PDF', defaultPath: dir ? dir + '\\' + name : name, filters: FORMAT_INFO.pdf.filters });
     if (!path) return;
     await this.preparePrint();

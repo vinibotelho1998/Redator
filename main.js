@@ -8,7 +8,7 @@ const { execFile } = require('child_process');
 
 const APP_NAME = 'Redator';
 const TITLE_BAR_COLOR = '#185abd';
-const SUPPORTED = ['.docx', '.docm', '.dotx', '.md', '.markdown', '.txt', '.text', '.log', '.csv', '.html', '.htm', '.odt', '.rtf'];
+const SUPPORTED = ['.docx', '.docm', '.dotx', '.doc', '.dot', '.md', '.markdown', '.txt', '.text', '.log', '.csv', '.html', '.htm', '.odt', '.rtf'];
 
 app.setName(APP_NAME);
 if (process.platform === 'win32') app.setAppUserModelId('br.redator.app');
@@ -373,8 +373,9 @@ ipcMain.handle('file:open-dialog', async (event, opts = {}) => {
     defaultPath: opts.defaultPath,
     properties: ['openFile', 'multiSelections'],
     filters: opts.filters || [
-      { name: 'Todos os documentos', extensions: ['docx', 'docm', 'dotx', 'odt', 'md', 'markdown', 'txt', 'html', 'htm', 'rtf'] },
+      { name: 'Todos os documentos', extensions: ['docx', 'docm', 'dotx', 'doc', 'odt', 'md', 'markdown', 'txt', 'html', 'htm', 'rtf'] },
       { name: 'Documento do Word', extensions: ['docx', 'docm', 'dotx'] },
+      { name: 'Documento do Word 97-2003', extensions: ['doc', 'dot'] },
       { name: 'Texto OpenDocument', extensions: ['odt'] },
       { name: 'Markdown', extensions: ['md', 'markdown'] },
       { name: 'Página da Web', extensions: ['html', 'htm'] },

@@ -37,6 +37,7 @@ $types = [ordered]@{
   '.markdown' = 'Documento Markdown'
   '.txt' = 'Documento de Texto'
   '.rtf' = 'Documento Rich Text'
+  '.doc' = 'Documento do Word 97-2003'
 }
 function Set-Default($path, $value) {
   if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }

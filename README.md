@@ -6,7 +6,8 @@
 
 <p align="center">
   Editor de documentos gratuito com a cara do Word.<br>
-  Abre, edita e salva <b>.docx</b>, <b>.md</b>, <b>.odt</b>, <b>.rtf</b>, <b>.html</b> e <b>.txt</b>, e exporta <b>PDF</b>.
+  Abre, edita e salva <b>.docx</b>, <b>.md</b>, <b>.odt</b>, <b>.rtf</b>, <b>.html</b> e <b>.txt</b>,<br>
+  abre o <b>.doc</b> antigo e exporta <b>PDF</b>.
 </p>
 
 <p align="center">
@@ -85,8 +86,13 @@ não traz mais o WordPad, ele também serve para abrir os `.rtf` que sobraram.
 | Página da Web `.html` `.htm` | ✅ | ✅ |
 | Texto `.txt` `.csv` `.log` | ✅ | ✅ |
 | Rich Text `.rtf` | ✅ | ✅ |
+| Word 97-2003 `.doc` | ✅ | como `.docx` |
 | PDF | | ✅ |
-| Word 97-2003 `.doc` | em breve | |
+
+O `.doc` antigo abre em modo de compatibilidade, com títulos numerados, listas,
+tabelas com células mescladas, imagens, links, sumário, notas de rodapé e
+cabeçalho. Ao salvar, o Redator grava um `.docx` novo ao lado e não toca no
+original.
 
 ## Instalação
 

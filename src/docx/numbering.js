@@ -175,6 +175,32 @@ export class Numbering {
   }
 
   // Nova instância reiniciando a numeração
+  // Lista com os níveis exatos de outro formato (usada na leitura de .doc):
+  // [{ numFmt, lvlText, start, left, hanging, font, jc, suff }]
+  createFromLevels(levels) {
+    const absId = String(this.nextAbstractId());
+    const numId = String(this.nextNumId());
+    let x = '<w:abstractNum w:abstractNumId="' + absId + '"><w:multiLevelType w:val="hybridMultilevel"/>';
+    for (let i = 0; i < 9; i++) {
+      const l = levels[i] || { numFmt: 'decimal', lvlText: '%' + (i + 1) + '.', start: 1 };
+      const rpr = l.font ? '<w:rPr><w:rFonts w:ascii="' + esc(l.font) + '" w:hAnsi="' + esc(l.font) + '" w:hint="default"/></w:rPr>' : '';
+      x += '<w:lvl w:ilvl="' + i + '"><w:start w:val="' + (l.start ?? 1) + '"/><w:numFmt w:val="' + (l.numFmt || 'decimal') + '"/>'
+        + (l.suff ? '<w:suff w:val="' + l.suff + '"/>' : '') + '<w:lvlText w:val="' + esc(l.lvlText || '') + '"/><w:lvlJc w:val="' + (l.jc || 'left') + '"/>'
+        + '<w:pPr><w:ind w:left="' + (l.left ?? 720 * (i + 1)) + '" w:hanging="' + Math.max(0, l.hanging ?? 360) + '"/></w:pPr>' + rpr + '</w:lvl>';
+    }
+    x += '</w:abstractNum>';
+    const el = parseXml('<w:root ' + W_DECL + '>' + x + '</w:root>').documentElement.firstElementChild;
+    this.ensureDoc();
+    const root = this.doc.documentElement;
+    const imported = this.doc.importNode(el, true);
+    const firstNum = children(root, 'num')[0];
+    if (firstNum) root.insertBefore(imported, firstNum); else root.appendChild(imported);
+    this.addAbstractEl(imported);
+    this.addNumInstance(numId, absId, null);
+    this.dirty = true;
+    return numId;
+  }
+
   restartList(numId) {
     const num = this.nums.get(String(numId));
     if (!num) return numId;
