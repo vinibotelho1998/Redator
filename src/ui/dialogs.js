@@ -2,19 +2,32 @@
 import { h, clear } from './dom.js';
 import { icon } from './icons.js';
 import { colorPanel } from './colorpicker.js';
-import { openPanel } from './popup.js';
+import { openPanel, closeAllPopups } from './popup.js';
 import { twipToCm, cmToTwip, fmtNumber, parseLength, TWIP_PER_CM } from '../util/units.js';
 import { normHex } from '../util/color.js';
 import { PAPER_SIZES } from '../model.js';
 
 let dialogCount = 0;
+const dialogStack = [];
+let componentId = 0;
+let measureUnit = 'cm';
+
+export function formatMeasure(cm) {
+  const factor = measureUnit === 'in' ? 1 / 2.54 : measureUnit === 'pt' ? 72 / 2.54 : 1;
+  return fmtNumber(cm * factor, 2) + ' ' + (measureUnit === 'in' ? 'pol' : measureUnit);
+}
+
+export function setMeasureUnit(unit) {
+  measureUnit = ['cm', 'in', 'pt'].includes(unit) ? unit : 'cm';
+  for (const el of document.querySelectorAll('.spin')) el.refreshUnit?.();
+}
 
 export class Dialog {
   constructor(title, body, buttons = [], opts = {}) {
     this.opts = opts;
     this.result = null;
     this.overlay = h('div', { class: 'dlg-overlay' + (opts.dim ? ' dim' : '') });
-    this.box = h('div', { class: 'dlg ' + (opts.className || ''), role: 'dialog', 'aria-label': title });
+    this.box = h('div', { class: 'dlg ' + (opts.className || ''), role: 'dialog', 'aria-label': title, 'aria-modal': 'true', tabindex: '-1' });
     const closeBtn = h('button', { class: 'dlg-x', title: 'Fechar', html: icon('close'), onclick: () => this.cancel() });
     this.titleBar = h('div', { class: 'dlg-title' }, h('span', { text: title }), closeBtn);
     this.body = h('div', { class: 'dlg-body' }, body);
@@ -29,7 +42,15 @@ export class Dialog {
     this.box.append(this.titleBar, this.body, this.footer);
     this.overlay.appendChild(this.box);
     this.onKey = (e) => {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.cancel(); }
+      if (dialogStack[dialogStack.length - 1] !== this || document.querySelector('.popup')) return;
+      if (e.key === 'Tab') {
+        const items = [...this.box.querySelectorAll('button,input,select,textarea,[tabindex]')]
+          .filter((el) => !el.disabled && el.tabIndex >= 0 && el.getClientRects().length && !el.closest('[hidden]'));
+        const first = items[0] || this.box, last = items[items.length - 1] || this.box;
+        if (!this.box.contains(document.activeElement) || (e.shiftKey && document.activeElement === first) || (!e.shiftKey && document.activeElement === last)) {
+          e.preventDefault(); (e.shiftKey ? last : first).focus();
+        }
+      } else if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); this.cancel(); }
       else if (e.key === 'Enter' && !e.shiftKey && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON' && !e.target.closest('.dlg-list')) {
         const primary = buttons.find((b) => b.primary);
         if (primary) { e.preventDefault(); this.press(primary); }
@@ -60,11 +81,17 @@ export class Dialog {
   }
 
   open() {
+    closeAllPopups();
+    this.returnFocus = document.activeElement;
     dialogCount++;
+    dialogStack.push(this);
+    this.background = [...document.body.children].map((el) => [el, el.inert]);
+    for (const [el] of this.background) el.inert = true;
     document.body.appendChild(this.overlay);
     document.addEventListener('keydown', this.onKey, true);
     setTimeout(() => {
-      const first = this.box.querySelector('[autofocus]') || this.box.querySelector('input:not([type=checkbox]):not([type=radio]),select,textarea');
+      if (!this.overlay.isConnected || dialogStack[dialogStack.length - 1] !== this) return;
+      const first = [...this.box.querySelectorAll('[autofocus],input:not([type=checkbox]):not([type=radio]),select,textarea')].find((el) => !el.disabled && el.getClientRects().length);
       if (first) { first.focus(); if (first.select) first.select(); }
       else if (this.buttons.length) this.buttons[this.buttons.length - 1].focus();
     }, 0);
@@ -86,11 +113,16 @@ export class Dialog {
 
   close(value) {
     if (!this.overlay.isConnected) return;
+    closeAllPopups();
     dialogCount--;
+    const at = dialogStack.indexOf(this);
+    if (at >= 0) dialogStack.splice(at, 1);
     this.overlay.remove();
+    for (const [el, inert] of this.background || []) el.inert = inert;
     document.removeEventListener('keydown', this.onKey, true);
     this.resolve(value);
     if (this.opts.onClose) this.opts.onClose(value);
+    if (this.returnFocus?.isConnected && !this.returnFocus.closest('[inert]')) this.returnFocus.focus();
   }
 }
 
@@ -132,51 +164,79 @@ export function checkbox(label, checked, opts = {}) {
 
 // Campo numérico com setas e unidade, como os do Word
 export function spinner(value, opts = {}) {
-  const unit = opts.unit || 'cm';
+  const unit = opts.unit ?? 'cm';
   const step = opts.step ?? (unit === 'pt' ? 6 : unit === 'cm' ? 0.1 : 1);
   const min = opts.min ?? (unit === 'pt' ? 0 : -100);
   const max = opts.max ?? 1000;
-  const input = h('input', { type: 'text', class: 'inp spin-inp', spellcheck: 'false' });
-  const fmt = (v) => (v == null || Number.isNaN(v) ? '' : fmtNumber(v, unit === 'pt' ? 1 : 2) + (opts.suffix != null ? opts.suffix : ' ' + unit));
-  input.value = fmt(value);
+  const input = h('input', { type: 'text', class: 'inp spin-inp', spellcheck: 'false', role: 'spinbutton', 'aria-valuemin': min, 'aria-valuemax': max });
+  let displayUnit = unit === 'cm' ? measureUnit : unit;
+  let original = value, formatted = '';
+  const factor = () => unit === 'cm' ? (displayUnit === 'in' ? 1 / 2.54 : displayUnit === 'pt' ? 72 / 2.54 : 1) : 1;
+  const fmt = (v) => (v == null || Number.isNaN(v) ? (opts.allowAuto ? 'Auto' : '') : fmtNumber(v * factor(), 2) + (opts.suffix != null ? opts.suffix : ' ' + (displayUnit === 'in' ? 'pol' : displayUnit)));
+  const set = (v) => {
+    original = v; formatted = fmt(v); input.value = formatted;
+    input.setAttribute('aria-valuemin', String(min * factor()));
+    input.setAttribute('aria-valuemax', String(max * factor()));
+    if (v == null) input.removeAttribute('aria-valuenow');
+    else input.setAttribute('aria-valuenow', String(v * factor()));
+    input.setAttribute('aria-valuetext', formatted);
+  };
+  set(value);
   const read = () => {
+    // A rounded display must not change the stored document measurement.
+    if (input.value === formatted) return original;
     const s = input.value.trim().toLowerCase().replace(',', '.');
-    if (s === '' || s === 'auto' || s === 'automático') return opts.allowAuto ? null : value;
+    if (s === '' || s === 'auto' || s === 'automático') return opts.allowAuto ? null : original;
+    if (unit === 'cm') {
+      const tw = parseLength(s, displayUnit);
+      if (tw == null) return original;
+      return Math.max(min, Math.min(max, twipToCm(tw)));
+    }
     const m = /^(-?\d*\.?\d+)/.exec(s);
-    if (!m) return value;
+    if (!m) return original;
     return Math.max(min, Math.min(max, parseFloat(m[1])));
   };
   const bump = (d) => {
     const v = read();
-    const next = Math.round(((v ?? 0) + d * step) * 100) / 100;
-    input.value = fmt(Math.max(min, Math.min(max, next)));
+    const displayStep = unit === 'cm' ? (displayUnit === 'pt' ? 1 : 0.1) / factor() : step;
+    const next = (v ?? 0) + d * displayStep;
+    set(Math.max(min, Math.min(max, next)));
     input.dispatchEvent(new Event('input', { bubbles: true }));
   };
-  const up = h('button', { class: 'spin-btn up', tabindex: '-1', type: 'button', onclick: () => bump(1) });
-  const down = h('button', { class: 'spin-btn down', tabindex: '-1', type: 'button', onclick: () => bump(-1) });
+  const up = h('button', { class: 'spin-btn up', tabindex: '-1', type: 'button', 'aria-label': 'Aumentar valor', onclick: () => bump(1) });
+  const down = h('button', { class: 'spin-btn down', tabindex: '-1', type: 'button', 'aria-label': 'Diminuir valor', onclick: () => bump(-1) });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowUp') { e.preventDefault(); bump(1); }
     if (e.key === 'ArrowDown') { e.preventDefault(); bump(-1); }
   });
-  input.addEventListener('blur', () => { const v = read(); input.value = v == null ? (opts.allowAuto ? 'Auto' : '') : fmt(v); });
+  input.addEventListener('blur', () => set(read()));
   const el = h('span', { class: 'spin' }, input, h('span', { class: 'spin-btns' }, up, down));
   el.input = input;
   el.get = read;
-  el.set = (v) => { input.value = fmt(v); };
+  el.set = set;
+  el.refreshUnit = () => { const v = read(); displayUnit = unit === 'cm' ? measureUnit : unit; set(v); };
   if (opts.width) el.style.width = opts.width;
   return el;
 }
 
 function tabs(defs) {
-  const head = h('div', { class: 'dlg-tabs' });
+  const prefix = 'dialog-tabs-' + (++componentId);
+  const head = h('div', { class: 'dlg-tabs', role: 'tablist' });
   const bodies = h('div', { class: 'dlg-tab-bodies' });
   const set = (i) => {
-    Array.from(head.children).forEach((c, k) => c.classList.toggle('active', k === i));
+    Array.from(head.children).forEach((c, k) => { c.classList.toggle('active', k === i); c.setAttribute('aria-selected', String(k === i)); c.tabIndex = k === i ? 0 : -1; });
     Array.from(bodies.children).forEach((c, k) => { c.hidden = k !== i; });
   };
   defs.forEach((d, i) => {
-    head.appendChild(h('button', { class: 'dlg-tab', type: 'button', text: d.label, onclick: () => set(i) }));
-    const b = h('div', { class: 'dlg-tab-body' }, d.body);
+    const tab = h('button', { class: 'dlg-tab', type: 'button', role: 'tab', id: prefix + '-tab-' + i, 'aria-controls': prefix + '-panel-' + i, text: d.label, onclick: () => set(i) });
+    tab.addEventListener('keydown', (e) => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+      e.preventDefault();
+      const next = e.key === 'Home' ? 0 : e.key === 'End' ? defs.length - 1 : (i + (e.key === 'ArrowLeft' ? -1 : 1) + defs.length) % defs.length;
+      head.children[next].click(); head.children[next].focus();
+    });
+    head.appendChild(tab);
+    const b = h('div', { class: 'dlg-tab-body', role: 'tabpanel', id: prefix + '-panel-' + i, 'aria-labelledby': tab.id }, d.body);
     bodies.appendChild(b);
   });
   set(defs.findIndex((d) => d.active) >= 0 ? defs.findIndex((d) => d.active) : 0);
@@ -420,7 +480,7 @@ export function tabsDialog(app) {
     clear(list);
     stops.sort((a, b) => a.pos - b.pos);
     stops.forEach((s, i) => list.appendChild(h('div', {
-      class: 'dlg-list-item' + (i === selected ? ' sel' : ''), text: fmtNumber(twipToCm(s.pos), 2) + ' cm',
+      class: 'dlg-list-item' + (i === selected ? ' sel' : ''), text: formatMeasure(twipToCm(s.pos)),
       onclick: () => { selected = i; posInp.set(twipToCm(s.pos)); alignSel.value = s.val; leaderSel.value = s.leader; render(); },
     })));
   };

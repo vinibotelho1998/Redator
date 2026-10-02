@@ -1,7 +1,7 @@
 {
   "name": "redator",
   "productName": "Redator",
-  "version": "1.0.8",
+  "version": "1.1.0",
   "description": "Editor de documentos com a cara do Word: docx, doc, pdf, odt, rtf, md, html e txt",
   "main": "main.js",
   "private": true,
@@ -15,7 +15,10 @@
   "scripts": {
     "build": "node build.mjs",
     "start": "node build.mjs && electron .",
-    "test": "node tests/rodar.mjs",
+    "test": "npm run test:unit && node tests/rodar.mjs",
+    "test:unit": "node --test tests/*.test.cjs",
+    "test:electron": "node tests/rodar.mjs",
+    "test:packaged": "node tests/rodar.mjs --packaged",
     "package": "node build.mjs --minify && node tools/package.mjs",
     "setup": "powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build.ps1"
   },

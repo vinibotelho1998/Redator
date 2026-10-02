@@ -3,6 +3,7 @@ import { h } from './dom.js';
 import { icon } from './icons.js';
 
 let openStack = [];
+let popupId = 0;
 
 export function closeAllPopups() {
   for (const p of openStack.slice().reverse()) p.close();
@@ -12,7 +13,7 @@ export function closeAllPopups() {
 export class Popup {
   constructor(content, opts = {}) {
     this.opts = opts;
-    this.el = h('div', { class: 'popup ' + (opts.className || ''), role: 'menu' });
+    this.el = h('div', { class: 'popup ' + (opts.className || ''), role: opts.role || 'menu', id: 'popup-' + (++popupId), tabindex: '-1' });
     this.el.appendChild(content);
     this.onDown = (e) => {
       if (this.el.contains(e.target)) return;
@@ -21,20 +22,64 @@ export class Popup {
       this.close();
     };
     this.onKey = (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); this.close(); if (opts.returnFocus) opts.returnFocus.focus(); }
+      if (openStack[openStack.length - 1] !== this) return;
+      if (e.key === 'Escape' || (e.key === 'ArrowLeft' && opts.side === 'right')) {
+        e.preventDefault(); e.stopImmediatePropagation(); this.close();
+        const back = opts.returnFocus || opts.anchor || this.returnFocus;
+        if (back && back.isConnected) back.focus();
+        return;
+      }
+      if (e.key === 'Tab') {
+        const root = openStack[0];
+        const back = root?.opts.returnFocus || root?.opts.anchor || root?.returnFocus;
+        closeAllPopups();
+        if (back?.isConnected) back.focus();
+        return;
+      }
+      if (e.target.closest('input,textarea,select')) return;
+      const items = this.items();
+      const at = items.indexOf(document.activeElement);
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+        e.preventDefault(); e.stopPropagation();
+        const next = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : at < 0 ? (e.key === 'ArrowUp' ? items.length - 1 : 0) : (at + (e.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length;
+        items[next]?.focus();
+      } else if (e.key === 'ArrowRight' && document.activeElement._openSub) {
+        e.preventDefault(); e.stopPropagation(); document.activeElement._openSub(true);
+      }
     };
   }
 
+  items() {
+    return [...this.el.querySelectorAll('button, [role="menuitem"], [role="menuitemcheckbox"], input, select')]
+      .filter((el) => !el.disabled && el.getAttribute('aria-disabled') !== 'true' && el.getClientRects().length && !el.closest('[hidden]'));
+  }
+
+  focusFirst() { (this.items()[0] || this.el).focus(); }
+
   open() {
+    this.returnFocus = document.activeElement;
     if (!this.opts.keepOthers) closeAllPopups();
     document.body.appendChild(this.el);
     this.position();
     openStack.push(this);
-    setTimeout(() => {
-      document.addEventListener('mousedown', this.onDown, true);
-      document.addEventListener('keydown', this.onKey, true);
-    }, 0);
-    if (this.opts.anchor) this.opts.anchor.classList.add('open');
+    // The triggering event has already passed document capture; subsequent keys
+    // must work immediately, including Escape just after ArrowDown.
+    document.addEventListener('mousedown', this.onDown, true);
+    document.addEventListener('keydown', this.onKey, true);
+    // Legacy panel actions also get native keyboard activation semantics.
+    for (const item of this.el.querySelectorAll('div.menu-item, div.cp-row-btn, div.font-item')) {
+      if (!item.hasAttribute('role')) item.setAttribute('role', 'menuitem');
+      item.tabIndex = 0;
+      item.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); item.click(); }
+      });
+    }
+    if (this.opts.anchor) {
+      this.opts.anchor.classList.add('open');
+      this.opts.anchor.setAttribute('aria-expanded', 'true');
+      this.opts.anchor.setAttribute('aria-controls', this.el.id);
+    }
+    if (this.opts.keyboard || (this.opts.anchor && document.activeElement === this.opts.anchor)) this.focusFirst();
     return this;
   }
 
@@ -66,11 +111,19 @@ export class Popup {
 
   close() {
     if (!this.el.isConnected) return;
+    // Closing a parent must also remove any submenu attached to it.
+    for (const child of openStack.slice().reverse()) {
+      if (child !== this && child.opts.anchor && this.el.contains(child.opts.anchor)) child.close();
+    }
     this.el.remove();
     document.removeEventListener('mousedown', this.onDown, true);
     document.removeEventListener('keydown', this.onKey, true);
     openStack = openStack.filter((p) => p !== this);
-    if (this.opts.anchor) this.opts.anchor.classList.remove('open');
+    if (this.opts.anchor) {
+      this.opts.anchor.classList.remove('open');
+      this.opts.anchor.setAttribute('aria-expanded', 'false');
+      this.opts.anchor.removeAttribute('aria-controls');
+    }
     if (this.opts.onClose) this.opts.onClose();
   }
 }
@@ -83,9 +136,12 @@ export function buildMenu(items, close) {
     if (it.separator) { list.appendChild(h('div', { class: 'menu-sep' })); continue; }
     if (it.header) { list.appendChild(h('div', { class: 'menu-header', text: it.header })); continue; }
     if (it.element) { list.appendChild(it.element); continue; }
-    const row = h('div', {
+    const row = h('button', {
       class: 'menu-item' + (it.disabled ? ' disabled' : '') + (it.checked ? ' checked' : '') + (it.className ? ' ' + it.className : '') + (it.bold ? ' bold' : ''),
-      role: 'menuitem', tabindex: '-1',
+      type: 'button', role: it.checked !== undefined ? 'menuitemcheckbox' : 'menuitem', tabindex: '0',
+      disabled: !!it.disabled, 'aria-disabled': String(!!it.disabled),
+      'aria-checked': it.checked !== undefined ? String(!!it.checked) : null,
+      'aria-haspopup': it.submenu ? 'menu' : null, 'aria-expanded': it.submenu ? 'false' : null,
     },
     h('span', { class: 'mi-icon', html: it.checked && !it.icon ? icon('check') : it.icon ? icon(it.icon) || '' : '' }),
     h('span', { class: 'mi-label', text: it.label, style: it.labelStyle || null }),
@@ -95,16 +151,17 @@ export function buildMenu(items, close) {
     if (!it.disabled) {
       if (it.submenu) {
         let sub = null;
-        const openSub = () => {
-          if (sub && sub.el.isConnected) return;
+        const openSub = (keyboard = false) => {
+          if (sub && sub.el.isConnected) { if (keyboard) sub.focusFirst(); return; }
           for (const other of list.querySelectorAll('.menu-item.sub-open')) other.classList.remove('sub-open');
           row.classList.add('sub-open');
           const items2 = typeof it.submenu === 'function' ? it.submenu() : it.submenu;
-          sub = new Popup(buildMenu(items2, close), { anchor: row, side: 'right', keepOthers: true, className: 'submenu' }).open();
+          sub = new Popup(buildMenu(items2, close), { anchor: row, side: 'right', keepOthers: true, className: 'submenu', keyboard }).open();
           list._sub = sub;
         };
         row.addEventListener('mouseenter', () => { if (list._sub && list._sub !== sub) list._sub.close(); openSub(); });
-        row.addEventListener('click', openSub);
+        row._openSub = openSub;
+        row.addEventListener('click', (e) => openSub(e.detail === 0));
       } else {
         row.addEventListener('mouseenter', () => { if (list._sub) { list._sub.close(); list._sub = null; } });
         row.addEventListener('click', (e) => {
@@ -133,12 +190,15 @@ export function openPanel(anchor, element, opts = {}) {
 
 export function tooltip(el, text, shortcut, desc) {
   el.setAttribute('aria-label', text);
+  if (desc) el.setAttribute('aria-description', desc);
+  el.tooltip = { text, shortcut, desc };
   let t = null;
   let tip = null;
   const show = () => {
+    if (tip || !el.isConnected) return;
     const r = el.getBoundingClientRect();
     tip = h('div', { class: 'tooltip' },
-      h('div', { class: 'tt-title' }, text, shortcut ? h('span', { class: 'tt-short', text: ' (' + shortcut + ')' }) : null),
+      h('div', { class: 'tt-title' }, text, el.tooltip.shortcut ? h('span', { class: 'tt-short', text: ' (' + el.tooltip.shortcut + ')' }) : null),
       desc ? h('div', { class: 'tt-desc', text: desc }) : null);
     document.body.appendChild(tip);
     const tr = tip.getBoundingClientRect();
@@ -151,6 +211,8 @@ export function tooltip(el, text, shortcut, desc) {
   };
   const hide = () => { clearTimeout(t); if (tip) { tip.remove(); tip = null; } };
   el.addEventListener('mouseenter', () => { t = setTimeout(show, 550); });
+  el.addEventListener('focus', () => { t = setTimeout(show, 550); });
+  el.addEventListener('blur', hide);
   el.addEventListener('mouseleave', hide);
   el.addEventListener('mousedown', hide);
 }

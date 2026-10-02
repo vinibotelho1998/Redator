@@ -845,13 +845,18 @@ export class PageLayout {
   }
 
   placeTable(b, dom, top, bottom, S) {
-    const view = this.view;
-    const fnIds = [];
-    if (this.model.footnotes.size) {
-      for (const sup of dom.querySelectorAll('sup.fnref-footnote')) {
-        try { fnIds.push(JSON.parse(sup.getAttribute('data-fn')).id); } catch { /* ignora */ }
+    const notesIn = (element) => {
+      const ids = new Set();
+      if (this.model.footnotes.size) for (const sup of element.querySelectorAll('sup.fnref-footnote')) {
+        try {
+          const id = JSON.parse(sup.getAttribute('data-fn')).id;
+          if (id != null) ids.add(String(id));
+        } catch { /* ignora */ }
       }
-    }
+      return [...ids];
+    };
+    const freshNotes = (ids) => ids.filter((id) => !S.pageFns[S.page].includes(id));
+    const fnIds = freshNotes(notesIn(dom));
     const fnExtra = fnIds.length ? S.fnHeight(fnIds) : 0;
     if (bottom <= S.limit(S.page, fnExtra) + EPS) {
       if (fnExtra) { S.fnUsed[S.page] += fnExtra; S.pageFns[S.page].push(...fnIds); }
@@ -874,12 +879,15 @@ export class PageLayout {
     for (const r of rowsDom) {
       if (r.classList.contains('pb')) { rowOld += Number(r.dataset.h) || r.getBoundingClientRect().height / (this.zoom || 1); continue; }
       const rect = r.getBoundingClientRect();
-      rows.push({ top: S.Y(rect.top) - S.oldAbove - rowOld + S.shift, bottom: S.Y(rect.bottom) - S.oldAbove - rowOld + S.shift, index: ri++ });
+      rows.push({ top: S.Y(rect.top) - S.oldAbove - rowOld + S.shift, bottom: S.Y(rect.bottom) - S.oldAbove - rowOld + S.shift, index: ri++, fns: notesIn(r) });
     }
     for (let i = 0; i < rows.length; i++) {
       const rt = rows[i].top + rowShift;
       const rb = rows[i].bottom + rowShift;
-      if (rb > S.limit(S.page) + EPS) {
+      const rowFns = freshNotes(rows[i].fns);
+      const rowExtra = rowFns.length ? S.fnHeight(rowFns) : 0;
+      // Reserva a área da nota na página da linha que contém a referência.
+      if (rb > S.limit(S.page, rowExtra) + EPS) {
         if (i === firstOnPage) {
           if (i === 0 && !S.atPageTop(top + rowShift)) {
             const { h } = S.breakBefore(b.pos, top + rowShift, true, dom);
@@ -887,19 +895,22 @@ export class PageLayout {
             i = -1;
             continue;
           }
+          // Linha maior que a área útil: o modelo atual ainda não a divide.
+          // Mesmo nesse caso, a nota acompanha esta linha, sem ir ao fim da tabela.
+        } else {
+          const pos = b.pos + 1 + offsets[i];
+          const h = S.contentTop(S.page + 1) - rt;
+          S.newBreaks.push({ pos, kind: 'row', h: Math.max(0, h), cols: colCount });
+          rowShift += Math.max(0, h);
+          S.shift += Math.max(0, h);
+          S.newPage();
+          firstOnPage = i;
+          i -= 1;
           continue;
         }
-        const pos = b.pos + 1 + offsets[i];
-        const h = S.contentTop(S.page + 1) - rt;
-        S.newBreaks.push({ pos, kind: 'row', h: Math.max(0, h), cols: colCount });
-        rowShift += Math.max(0, h);
-        S.shift += Math.max(0, h);
-        S.newPage();
-        firstOnPage = i;
-        i -= 1;
       }
+      if (rowExtra) { S.fnUsed[S.page] += rowExtra; S.pageFns[S.page].push(...rowFns); }
     }
-    if (fnExtra) { S.fnUsed[S.page] += fnExtra; S.pageFns[S.page].push(...fnIds); }
     return { top };
   }
 

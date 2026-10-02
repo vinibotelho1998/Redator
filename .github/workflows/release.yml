@@ -3,18 +3,22 @@ name: Build e Release
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.versao.outputs.numero }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,33 +37,115 @@ jobs:
       - name: Rodar a bateria de testes
         run: npm test
 
+      - name: Publicar resultado dos testes
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostico-testes
+          path: tests-results/
+          if-no-files-found: ignore
+
       - name: Incrementar versao
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         id: versao
         run: |
           $nova = (npm version patch --no-git-tag-version).Trim().TrimStart('v')
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json
-          git commit -m "chore: incrementa versao para $nova [skip ci]"
-          git push origin HEAD:main
           echo "numero=$nova" >> $env:GITHUB_OUTPUT
 
       - name: Empacotar o app
         run: npm run package
+
+      - name: Testar o aplicativo empacotado
+        run: npm run test:packaged
+
+      - name: Publicar diagnostico do pacote
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostico-pacote
+          path: tests-results/
+          if-no-files-found: ignore
 
       - name: Instalar Inno Setup
         run: choco install innosetup --no-progress -y
 
       - name: Compilar instalador
         run: |
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=${{ steps.versao.outputs.numero }}" packaging\Redator_Setup.iss
+          $versao = (Get-Content package.json | ConvertFrom-Json).version
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$versao" packaging\Redator_Setup.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Publicar release "latest"
+      - name: Gerar checksum do instalador
+        run: |
+          $hash = (Get-FileHash out/Redator-Setup.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  Redator-Setup.exe" | Set-Content out/SHA256SUMS.txt -Encoding ascii
+
+      - name: Guardar instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: Redator-installer
+          path: |
+            out/Redator-Setup.exe
+            out/SHA256SUMS.txt
+
+      - name: Guardar arquivos de versao
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Redator-version
+          path: |
+            package.json
+            package-lock.json
+
+  publish:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Recuperar instalador testado
+        uses: actions/download-artifact@v4
+        with:
+          name: Redator-installer
+          path: out
+
+      - name: Recuperar arquivos de versao
+        uses: actions/download-artifact@v4
+        with:
+          name: Redator-version
+          path: .
+
+      - name: Registrar a versao testada
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: incrementa versao para ${{ needs.build.outputs.version }} [skip ci]"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "sha=$(git rev-parse HEAD)" >> $env:GITHUB_OUTPUT
+
+      - name: Publicar release com historico
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete latest --cleanup-tag --yes 2>$null
-          gh release create latest "out/Redator-Setup.exe" `
-            --title "Redator v${{ steps.versao.outputs.numero }}" `
-            --notes "Instalador gerado automaticamente do commit ${{ github.sha }} (versao ${{ steps.versao.outputs.numero }}). Abre e edita docx, doc, odt, rtf, md, html e txt, exporta PDF, recupera documentos nao salvos e se registra no Abrir com do Windows. Nao exige Node nem o repositorio." `
+          $tag = "v${{ needs.build.outputs.version }}"
+          $notas = @"
+          Instalador gerado do commit ${{ steps.commit.outputs.sha }}, versão ${{ needs.build.outputs.version }}.
+
+          O arquivo SHA256SUMS.txt permite conferir a integridade do instalador.
+          Abre e edita documentos, exporta PDF e oferece recuperação automática. Não exige Node nem o repositório.
+          "@
+          $notas | Set-Content out/release-notes.md -Encoding utf8
+          gh release create $tag "out/Redator-Setup.exe" "out/SHA256SUMS.txt" `
+            --target "${{ steps.commit.outputs.sha }}" `
+            --title "Redator v${{ needs.build.outputs.version }}" `
+            --notes-file out/release-notes.md `
             --latest
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld('host', {
   readFile: (p) => ipcRenderer.invoke('file:read', p),
   fileExists: (p) => ipcRenderer.invoke('file:exists', p),
   statFile: (p) => ipcRenderer.invoke('file:stat', p),
-  writeFile: (p, data, extras) => ipcRenderer.invoke('file:write', p, data, extras),
+  writeFile: (p, data, extras, options) => ipcRenderer.invoke('file:write', p, data, extras, options),
   openDialog: (opts) => ipcRenderer.invoke('file:open-dialog', opts),
   imageDialog: () => ipcRenderer.invoke('file:image-dialog'),
   saveDialog: (opts) => ipcRenderer.invoke('file:save-dialog', opts),
@@ -44,14 +44,18 @@ contextBridge.exposeInMainWorld('host', {
   openDefaultApps: () => ipcRenderer.invoke('app:open-default-apps'),
   viewPdf: (p) => ipcRenderer.invoke('pdf:view-original', p),
   saveRecovery: (data, meta) => ipcRenderer.invoke('recover:save', data, meta),
-  clearRecovery: () => ipcRenderer.send('recover:clear'),
+  clearRecovery: () => ipcRenderer.invoke('recover:clear'),
   takeRecovery: (id) => ipcRenderer.invoke('recover:take', id),
+  confirmRecovery: (id) => ipcRenderer.invoke('recover:confirm', id),
+  releaseRecovery: (id) => ipcRenderer.invoke('recover:release', id),
   openRecovered: (id) => ipcRenderer.invoke('recover:open', id),
   discardRecovery: (ids) => ipcRenderer.invoke('recover:discard', ids),
   checkWord: (word) => ipcRenderer.invoke('spell:suggest', word),
   addWord: (word) => ipcRenderer.invoke('spell:add-word', word),
   on: (channel, fn) => {
-    if (!CHANNELS.includes(channel)) return;
-    ipcRenderer.on(channel, (_e, ...args) => fn(...args));
+    if (!CHANNELS.includes(channel) || typeof fn !== 'function') return;
+    const listener = (_e, ...args) => fn(...args);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
   },
 });

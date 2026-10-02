@@ -7,7 +7,7 @@ import { placeholderImage } from '../docx/reader.js';
 const px = (emu) => (Number(emu) || 0) / 9525;
 
 export function mediaSrc(a) {
-  if (a.mediaPath && R.model) {
+  if (a.mediaPath && R.model && (!a.sourceId || a.sourceId === R.model.clipboardId)) {
     const u = R.model.mediaUrl(a.mediaPath);
     if (u) return u;
   }

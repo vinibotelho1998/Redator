@@ -22,8 +22,21 @@ function readData(dom, name) {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
+function drawingFromClipboard(dom) {
+  const a = readData(dom, 'data-da') || {};
+  const sourceId = R.model && R.model.clipboardId;
+  // Um caminho como word/media/image1.png não identifica uma imagem fora do
+  // pacote original. XML e relacionamentos antigos também não são portáveis.
+  const foreign = !a.sourceId || a.sourceId !== sourceId;
+  return {
+    ...a,
+    ...(foreign ? { mediaPath: null, rId: null, xml: null, srcPart: null, ocx: null, ocy: null } : {}),
+    sourceId: null, src: dom.getAttribute('src'),
+  };
+}
+
 const nodes = {
-  doc: { content: 'block+' },
+  doc: { content: 'block+', attrs: { pageProperties: attr() } },
 
   paragraph: {
     group: 'block',
@@ -186,9 +199,10 @@ const nodes = {
       fill: attr(), line: attr(),
       ext: attr(),              // extensão original da imagem
       srcPart: attr(),          // parte de origem, para validar ids de relacionamento
+      sourceId: attr(),         // identidade de sessão da origem do clipboard
     },
     parseDOM: [
-      { tag: 'img[data-da]', priority: 90, getAttrs: (dom) => ({ ...(readData(dom, 'data-da') || {}), src: dom.getAttribute('src') }) },
+      { tag: 'img[data-da]', priority: 90, getAttrs: drawingFromClipboard },
       {
         tag: 'img[src]',
         getAttrs(dom) {

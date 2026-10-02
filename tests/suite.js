@@ -75,6 +75,14 @@
       if (at == null) throw new Error('trecho não encontrado: ' + match);
       view.dispatch(view.state.tr.insertText(text, at));
     };
+    const chooseDialog = async (label) => {
+      for (let i = 0; i < 120; i++) {
+        const button = [...document.querySelectorAll('.dlg-overlay button')].find((b) => b.textContent.trim() === label);
+        if (button) { button.click(); return true; }
+        await sleep(25);
+      }
+      throw new Error('Botão de diálogo não encontrado: ' + label);
+    };
 
     // 1. Markdown salvo sem mexer volta byte a byte igual
     for (const name of ['nota-obsidian.md', 'readme-simples.md', 'readme-crlf.md']) {
@@ -279,7 +287,14 @@
       if (keep) keep.click();
       await check;
       expect('arquivo alterado fora com edição aqui: pergunta e mantém', !!keep && app.dirty && app.view.state.doc.textContent.includes('minha edição') && !app.view.state.doc.textContent.includes('Terceira'), { dialogo: !!dlg, texto: app.view.state.doc.textContent });
-      await app.writeTo(p, 'md');
+      const canceledSave = app.writeTo(p, 'md');
+      await chooseDialog('Cancelar');
+      const canceled = await canceledSave;
+      const diskBefore = new TextDecoder().decode((await host.readFile(p)).data);
+      expect('salvar com conflito: cancelar mantém ambas as versões', !canceled && app.dirty && diskBefore.includes('Terceira versão') && app.view.state.doc.textContent.includes('minha edição'));
+      const overwriteSave = app.writeTo(p, 'md');
+      await chooseDialog('Substituir');
+      expect('salvar com conflito: substituição exige escolha explícita', await overwriteSave);
       await app.checkExternalChange();
       expect('gravação do próprio Redator não conta como mudança de fora', !document.querySelector('.dlg-overlay') && app.view.state.doc.textContent.includes('minha edição'));
       app.pristine = true; app.dirty = false; app.filePath = null;
@@ -425,6 +440,9 @@
       for (const tab of ['insert', 'layout', 'references', 'review', 'view', 'home']) { app.ribbon.select(tab); await sleep(40); }
       expect('botões e diálogos sem erro', errs.length === before, errs.slice(before));
     }
+    await window.runEditorRegressions(app, rt, expect);
+    await window.runDocumentRegressions({ app, expect, sleep, rt });
+    await window.runUiRegressions({ app, expect, sleep, rt });
     expect('nenhum erro no console durante os testes', errs.length === 0, errs.slice(0, 5));
   } catch (err) {
     bad('execução', err && err.stack);

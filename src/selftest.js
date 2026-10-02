@@ -7,6 +7,7 @@ import { writeHtml, readHtml } from './formats/html.js';
 import { writeText, readText } from './formats/text.js';
 import { writeOdt, readOdt } from './formats/odt.js';
 import { writeRtf, readRtf } from './formats/rtf.js';
+import { lossesForFormat } from './formats/compatibility.js';
 import { R } from './editor/render.js';
 import * as C from './editor/commands.js';
 import JSZip from 'jszip';
@@ -19,6 +20,7 @@ function normalize(json) {
   // remove atributos que mudam legitimamente numa regravação
   const walk = (n) => {
     if (n.attrs) {
+      delete n.attrs.pageProperties; // histórico local; propriedades de página são conferidas no modelo
       delete n.attrs.xml; delete n.attrs.srcPart; delete n.attrs.rId; delete n.attrs.ocx; delete n.attrs.ocy;
       if (n.type === 'drawing') { delete n.attrs.mediaPath; delete n.attrs.name; }
       if (n.type === 'opaque_inline' && n.attrs.xml) delete n.attrs.xml;
@@ -62,7 +64,7 @@ async function validateZip(bytes) {
 // ganchos usados pelos roteiros de teste locais
 export const testApi = {
   readDocx, writeDocx, readMarkdown, writeMarkdown, readHtml, writeHtml, readText, writeText, readOdt, writeOdt, readRtf, writeRtf,
-  normalize, firstDiff, validateZip, JSZip, TextSelection,
+  normalize, firstDiff, validateZip, JSZip, TextSelection, lossesForFormat,
 };
 
 export async function runSelfTest(app) {

@@ -1,7 +1,7 @@
 // Redator: controlador principal da janela.
 import { TextSelection, NodeSelection } from 'prosemirror-state';
 import { Fragment } from 'prosemirror-model';
-import { undo, redo, undoDepth, redoDepth } from 'prosemirror-history';
+import { undo, redo, undoDepth, redoDepth, closeHistory } from 'prosemirror-history';
 import { selectAll } from 'prosemirror-commands';
 import {
   CellSelection, TableMap, isInTable, selectedRect, addColumnAfter, addColumnBefore, addRowAfter, addRowBefore,
@@ -12,6 +12,7 @@ import { R, effectiveNumPr, fontName } from './editor/render.js';
 import * as C from './editor/commands.js';
 import { createState, createView } from './editor/setup.js';
 import { PageLayout } from './editor/layout.js';
+import { pageProperties, restorePageProperties } from './editor/page-history.js';
 import { setSearch, clearSearch, findNext, gotoMatch, replaceCurrent, replaceAll, findKey } from './editor/plugins/find.js';
 import { columnWidths } from './editor/nodeviews.js';
 import { readDocx, convertPendingMedia, MIME, NEEDS_CONVERSION } from './docx/reader.js';
@@ -20,7 +21,8 @@ import { blankDocxBytes } from './docx/template.js';
 import { readMarkdown, writeMarkdown, bindMarkdownSource } from './formats/markdown.js';
 import { readHtml, writeHtml } from './formats/html.js';
 import { readText, writeText } from './formats/text.js';
-import { readOdt, writeOdt } from './formats/odt.js';
+import { readOdt, writeOdt, bindOdtSource } from './formats/odt.js';
+import { lossesForFormat } from './formats/compatibility.js';
 import { readRtf, writeRtf } from './formats/rtf.js';
 import { readDoc } from './formats/doc.js';
 import { readPdf } from './formats/pdf.js';
@@ -144,6 +146,8 @@ class App {
     this.recoverJob = null;
     this.recovered = false;
     this.saving = false;
+    this.saveJob = null;
+    this.saveAsJob = null;
   }
 
   // ------------------------------------------------------------ inicialização
@@ -198,6 +202,7 @@ class App {
   buildUI() {
     const root = this.root;
     root.className = 'app';
+    D.setMeasureUnit(this.prefs.units);
     // barra de título
     const qa = (ic, title, run, shortcut) => {
       const b = h('button', { class: 'qa-btn', type: 'button', html: icon(ic) });
@@ -214,7 +219,7 @@ class App {
     this.origBtn = h('button', { class: 'tb-orig', type: 'button', text: 'Ver original', hidden: true });
     this.origBtn.addEventListener('click', () => this.viewOriginal());
     tooltip(this.origBtn, 'Abrir o PDF original, como ele é, para ler e imprimir');
-    this.searchBox = h('input', { class: 'tb-search', type: 'search', placeholder: 'Pesquisar', spellcheck: 'false' });
+    this.searchBox = h('input', { class: 'tb-search', type: 'search', placeholder: 'Pesquisar no documento', 'aria-label': 'Pesquisar no documento', spellcheck: 'false' });
     this.searchBox.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); this.showNavPane('search', this.searchBox.value); }
       if (e.key === 'Escape') { this.searchBox.value = ''; this.focusEditor(); }
@@ -380,7 +385,8 @@ class App {
     try {
       const f = await this.host.readFile(p);
       await this.loadBytes(f.data, p, f.readonly);
-      this.fileStamp = { path: p, mtime: f.mtime, size: f.size };
+      this.fileStamp = { path: p, mtime: f.mtime, size: f.size, hash: f.hash };
+      this.noticedFileStamp = null;
     } finally {
       this.setBusy(null);
     }
@@ -422,7 +428,7 @@ class App {
     const compat = !!kind;
     this.setDocument(res.model, res.doc, { path: compat ? null : path, format: compat ? COMPAT[kind].format : format || 'txt', name: baseName(path) });
     if (compat) { this.importPath = path; this.importKind = kind; this.pristine = false; this.updateTitle(); }
-    this.readOnly = !!readonly;
+    this.setDocumentReadOnly(readonly);
     if (readonly) this.setInfo('Somente leitura');
     this.host.setDocState({ filePath: path, addRecent: true });
     this.host.addRecent(path);
@@ -457,8 +463,10 @@ class App {
       const st = await this.host.statFile(p);
       if (!st || this.filePath !== p) return;
       if (st.mtime === this.fileStamp.mtime && st.size === this.fileStamp.size) return;
-      // cada mudança é tratada uma vez
-      this.fileStamp = { path: p, mtime: st.mtime, size: st.size };
+      // Avisar uma vez não autoriza sobrescrever essa versão ao salvar.
+      const noticed = this.noticedFileStamp;
+      if (noticed && noticed.path === p && noticed.mtime === st.mtime && noticed.size === st.size) return;
+      this.noticedFileStamp = { path: p, mtime: st.mtime, size: st.size };
       if (this.dirty) {
         const r = await D.messageBox('Redator', '"' + this.docName + '" foi alterado por outro programa.\nRecarregar e perder as alterações feitas aqui?', [
           { label: 'Recarregar', value: 'reload' },
@@ -506,9 +514,16 @@ class App {
   }
 
   setDocument(model, doc, opts) {
+    const previousModel = this.model;
+    const pendingPrevious = [this.saveJob, this.recoverJob].filter(Boolean);
     if (this.hfEdit) this.closeHeaderFooter(true);
     if (this.view) { this.view.destroy(); this.view = null; }
+    if (previousModel && previousModel !== model && previousModel.dispose) {
+      Promise.allSettled(pendingPrevious).then(() => previousModel.dispose());
+    }
+    this.setDocumentReadOnly(false);
     this.model = model;
+    this.initialPageProperties = pageProperties(model);
     R.model = model;
     this.filePath = opts.path || null;
     this.importPath = null;
@@ -518,12 +533,19 @@ class App {
     this.dirty = false;
     this.pristine = !opts.path;
     this.recovered = false;
+    this.warnedLossy.clear();
     this.recoverStamp = this.editStamp;
     this.applyDocCss();
     this.layout.setModel(model);
     const state = createState(doc, this, { layout: this.layout });
     if (model.extra && model.extra.md && state.doc !== doc) bindMarkdownSource(model, state.doc);
+    if (model.extra && model.extra.odt && state.doc !== doc) bindOdtSource(model, state.doc);
     this.view = createView(this.hostEl, state, this);
+    this.view.dom.tabIndex = 0;
+    this.view.dom.setAttribute('role', 'textbox');
+    this.view.dom.setAttribute('aria-label', 'Conteúdo do documento');
+    this.view.dom.setAttribute('aria-multiline', 'true');
+    this.view.dom.setAttribute('aria-readonly', String(this.readOnly));
     this.activeView = this.view;
     this.view.dom.classList.toggle('show-markup', this.showMarkup);
     this.layout.setZoom(this.prefs.zoom || 1);
@@ -581,12 +603,20 @@ class App {
     if (!this.dirty) { this.dirty = true; this.updateTitle(); }
   }
 
-  markClean() {
+  markClean(stamp = this.editStamp) {
+    if (stamp !== this.editStamp) {
+      this.dirty = true;
+      this.updateTitle();
+      return false;
+    }
     this.dirty = false;
     this.recovered = false;
     this.recoverStamp = this.editStamp;
     this.updateTitle();
-    if (this.host.clearRecovery) this.host.clearRecovery();
+    if (this.host.clearRecovery) {
+      this.clearRecoveryJob = Promise.resolve(this.host.clearRecovery()).catch((err) => console.warn('Limpeza da AutoRecuperação falhou', err));
+    }
+    return true;
   }
 
   // ------------------------------------------------------------ AutoRecuperação
@@ -597,33 +627,41 @@ class App {
     if (!this.host.saveRecovery || this.prefs.autoRecover === false || !this.view) return null;
     if (!this.dirty || this.saving || this.recoverJob || this.recoverStamp === this.editStamp) return null;
     const now = Date.now();
-    if (!force && (now - this.lastEdit < 2500 || now - this.lastRecover < (this.recoverEvery || 60000))) return null;
+    if (!force && now - this.lastRecover < (this.recoverEvery || 60000)) return null;
+    if (!force && now - this.lastEdit < 2500 && now - this.lastRecover < 120000) return null;
     const stamp = this.editStamp;
     const job = async () => {
+      const model = this.model;
       const doc = this.view.state.doc;
-      const src = this.model.extra && this.model.extra.md;
-      const textInfo = (this.model.extra && this.model.extra.text) || null;
+      const src = model.extra && model.extra.md;
+      const textInfo = (model.extra && model.extra.text) || null;
+      const meta = { name: this.docName, path: this.filePath || this.importPath || null, format: this.format, text: textInfo };
+      meta.properties = { ...model.properties };
+      const odtDiagnostics = model.extra?.odt?.diagnostics;
+      if (odtDiagnostics?.length) meta.odtDiagnostics = odtDiagnostics;
       let data = null;
       let kind = 'docx';
+      const preservesContent = !['md', 'txt', 'csv'].includes(this.format)
+        || lossesForFormat(model, doc, this.format).length === 0;
       // Markdown aberto de um arquivo guarda o próprio texto, para não reescrever o arquivo inteiro ao salvar
-      if (this.format === 'md' && src && src.bound) {
+      if (preservesContent && this.format === 'md' && src && src.bound) {
         const path = this.filePath || this.importPath || '';
-        const { text, files } = writeMarkdown(doc, this.model, { baseDir: dirName(path), baseName: stripExt(baseName(path) || this.docName) });
+        const { text, files } = writeMarkdown(doc, model, { baseDir: dirName(path), baseName: stripExt(baseName(path) || this.docName) });
         if (!files.length) { data = encodeText(text, textInfo || { encoding: 'utf-8', bom: false }); kind = 'md'; }
-      } else if (this.format === 'txt') {
+      } else if (preservesContent && this.format === 'txt') {
         // texto puro é rápido de gravar mesmo num log enorme
-        data = writeText(doc, this.model);
+        data = writeText(doc, model);
         kind = 'txt';
-      } else if (this.format === 'csv') {
-        data = writeCsv(doc, this.model);
+      } else if (preservesContent && this.format === 'csv') {
+        data = writeCsv(doc, model);
         if (data) kind = 'csv';
       }
-      if (!data) data = await writeDocx(this.model, doc, { author: this.prefs.author || this.userName || '' });
-      const meta = { name: this.docName, path: this.filePath || this.importPath || null, format: this.format, kind, text: textInfo };
-      const id = await this.host.saveRecovery(data, meta);
-      if (id) { this.recoverStamp = stamp; this.recoverId = id; }
+      if (!data) data = await writeDocx(model, doc, { author: this.prefs.author || this.userName || '' });
+      if (this.model !== model) return;
+      const id = await this.host.saveRecovery(data, { ...meta, kind });
+      if (id && this.model === model) { this.recoverStamp = stamp; this.recoverId = id; }
       // documento pesado de gravar: a cópia fica mais espaçada para não pesar na digitação
-      this.recoverEvery = Math.max(60000, (Date.now() - now) * 40);
+      this.recoverEvery = Math.min(120000, Math.max(60000, (Date.now() - now) * 40));
     };
     this.lastRecover = now;
     this.recoverJob = job().catch((err) => console.warn('AutoRecuperação falhou', err)).finally(() => { this.recoverJob = null; });
@@ -633,21 +671,35 @@ class App {
   async restoreRecovered(id) {
     const r = await this.host.takeRecovery(id);
     if (!r) return false;
-    const { meta, data } = r;
-    const res = meta.kind === 'md' ? await readMarkdown(data, meta.path || '', { host: this.host })
-      : meta.kind === 'txt' ? await readText(data, meta.path || '')
-        : meta.kind === 'csv' ? (await readCsv(data, meta.path || '')) || (await readText(data, meta.path || ''))
-          : await readDocx(data);
-    if (meta.kind === 'docx' && meta.text && ['md', 'txt'].includes(meta.format)) res.model.extra.text = meta.text;
-    this.setDocument(res.model, res.doc, { path: null, format: meta.format || 'docx', name: meta.name || 'Documento1' });
-    // salvar pede confirmação do local, que já vem com o arquivo original
-    this.importPath = meta.path || null;
-    this.recovered = true;
-    this.pristine = false;
-    this.dirty = true;
-    this.updateTitle();
-    this.setInfo('Documento recuperado');
-    return true;
+    try {
+      const { meta, data } = r;
+      const res = meta.kind === 'md' ? await readMarkdown(data, meta.path || '', { host: this.host })
+        : meta.kind === 'txt' ? await readText(data, meta.path || '')
+          : meta.kind === 'csv' ? (await readCsv(data, meta.path || '')) || (await readText(data, meta.path || ''))
+            : await readDocx(data);
+      if (meta.kind === 'docx' && meta.text && ['md', 'txt'].includes(meta.format)) res.model.extra.text = meta.text;
+      if (meta.properties && typeof meta.properties === 'object' && !Array.isArray(meta.properties)) {
+        for (const [key, value] of Object.entries(meta.properties)) {
+          if (typeof value === 'string' && ['title', 'subject', 'author', 'keywords', 'description', 'created', 'modified', 'lastModifiedBy'].includes(key)) res.model.properties[key] = value;
+        }
+      }
+      if (Array.isArray(meta.odtDiagnostics) && meta.odtDiagnostics.length) {
+        res.model.extra.odt = { diagnostics: meta.odtDiagnostics.filter((item) => item && typeof item.message === 'string') };
+      }
+      this.setDocument(res.model, res.doc, { path: null, format: meta.format || 'docx', name: meta.name || 'Documento1' });
+      // salvar pede confirmação do local, que já vem com o arquivo original
+      this.importPath = meta.path || null;
+      this.recovered = true;
+      this.pristine = false;
+      this.dirty = true;
+      this.updateTitle();
+      if (this.host.confirmRecovery) await this.host.confirmRecovery(id);
+      this.setInfo('Documento recuperado');
+      return true;
+    } catch (err) {
+      if (this.host.releaseRecovery) await this.host.releaseRecovery(id).catch(() => {});
+      throw err;
+    }
   }
 
   async offerRecovery(list) {
@@ -682,6 +734,14 @@ class App {
   }
 
   async saveAs(ext) {
+    if (this.saveAsJob) return this.saveAsJob;
+    const job = this.performSaveAs(ext);
+    this.saveAsJob = job;
+    try { return await job; }
+    finally { if (this.saveAsJob === job) this.saveAsJob = null; }
+  }
+
+  async performSaveAs(ext) {
     const fmt = ext || this.defaultExt();
     // arquivo de código ou configuração continua com a própria extensão
     const origExt = extOf(this.docName);
@@ -696,17 +756,16 @@ class App {
     return this.writeTo(path, realFmt);
   }
 
-  async confirmLossy(fmt) {
-    if (fmt !== 'txt' && fmt !== 'md' && fmt !== 'csv') return true;
-    if (this.format === fmt || this.warnedLossy.has(fmt)) return true;
-    const text = fmt === 'csv'
-      ? 'Ao salvar como CSV, só a primeira tabela do documento é salva, sem formatação.\nDeseja continuar?'
-      : fmt === 'txt'
-      ? 'Ao salvar como Texto sem Formatação, toda a formatação, imagens e objetos serão perdidos.\nDeseja continuar?'
-      : 'Ao salvar como Markdown, títulos, listas, tabelas, links e imagens são mantidos, mas cores, fontes e layout de página são perdidos.\nDeseja continuar?';
+  async confirmLossy(fmt, path = '') {
+    const losses = lossesForFormat(this.model, this.view.state.doc, fmt, { template: extOf(path) === 'ott' });
+    if (!losses.length) return true;
+    const signature = fmt + ':' + losses.join('\n');
+    if (this.warnedLossy.has(signature)) return true;
+    const text = 'Ao salvar como ' + ((FORMAT_INFO[fmt] || {}).label || fmt) + ':\n\n'
+      + losses.map((loss) => '• ' + loss).join('\n') + '\n\nDeseja continuar?';
     const r = await D.messageBox('Redator', text, [{ label: 'Salvar', primary: true, value: 'ok' }, { label: 'Cancelar', value: 'cancel' }], { cancelValue: 'cancel', icon: 'warn' });
     if (r !== 'ok') return false;
-    this.warnedLossy.add(fmt);
+    this.warnedLossy.add(signature);
     return true;
   }
 
@@ -735,32 +794,67 @@ class App {
   }
 
   async writeTo(path, fmt) {
-    if (!(await this.confirmLossy(fmt))) return false;
-    if (this.hfEdit) this.commitHeaderFooter();
-    this.setBusy('Salvando...');
-    this.saving = true;
+    const previous = this.saveJob || Promise.resolve();
+    const job = previous.catch(() => false).then(() => this.writeSnapshot(path, fmt));
+    this.saveJob = job;
+    let result;
+    try { result = await job; }
+    finally { if (this.saveJob === job) this.saveJob = null; }
+    // Release the queue before opening Save As, which enqueues another write.
+    return result === 'save-copy' ? this.performSaveAs(fmt) : result;
+  }
+
+  async writeSnapshot(path, fmt) {
     try {
+      this.saving = true;
+      if (!(await this.confirmLossy(fmt, path))) return false;
+      if (this.hfEdit) this.commitHeaderFooter();
+      this.setBusy('Salvando...');
       // a cópia de recuperação usa o mesmo pacote em memória; espera ela terminar
       if (this.recoverJob) await this.recoverJob;
+      const model = this.model;
+      const stamp = this.editStamp;
+      const expected = this.fileStamp && String(this.fileStamp.path).toLowerCase() === String(path).toLowerCase() ? this.fileStamp : undefined;
       const { data, extras } = await this.serialize(fmt, path);
-      const res = await this.host.writeFile(path, data, extras);
+      let res = await this.host.writeFile(path, data, extras, expected ? { expected } : {});
+      while (res && res.error === 'ECONFLICT') {
+        const choice = await D.messageBox('Arquivo alterado', '"' + baseName(path) + '" mudou fora do Redator desde que foi aberto.\nVocê pode salvar suas alterações em outra cópia ou substituir a versão do disco.', [
+          { label: 'Salvar cópia', primary: true, value: 'copy' },
+          { label: 'Substituir', value: 'overwrite' },
+          { label: 'Cancelar', value: 'cancel' },
+        ], { cancelValue: 'cancel', icon: 'warn' });
+        if (choice === 'copy') return 'save-copy';
+        if (choice !== 'overwrite') return false;
+        // If it changes again while the dialog is open, ask again.
+        res = await this.host.writeFile(path, data, extras, { expected: res.current });
+      }
       if (!res || !res.ok) {
         const code = res && res.error;
-        const why = code === 'EBUSY' || code === 'EPERM' ? 'O arquivo está aberto em outro programa ou você não tem permissão para gravá-lo.' : code === 'EACCES' ? 'Você não tem permissão para gravar neste local.' : 'Erro: ' + code;
-        await D.messageBox('Redator', 'Não foi possível salvar "' + baseName(path) + '".\n' + why, undefined, { icon: 'error' });
+        const why = code === 'EBUSY' || code === 'EPERM' ? 'O arquivo está aberto em outro programa ou você não tem permissão para gravá-lo.' : code === 'EACCES' ? 'Você não tem permissão para gravar neste local.' : code === 'EATTACHMENTPATH' ? 'Uma imagem aponta para fora da pasta permitida. Escolha outro local para salvar o documento.' : 'Erro: ' + code;
+        const pending = Array.isArray(res?.rollbackErrors) ? res.rollbackErrors : [];
+        const backups = pending.filter((item) => typeof item.backup === 'string').map((item) => item.backup);
+        const recovery = !pending.length ? '' : backups.length
+          ? '\nUma imagem auxiliar não pôde ser restaurada. A versão anterior foi preservada em:\n' + backups.join('\n')
+          : '\nUm arquivo auxiliar não pôde ser removido. Verifique:\n' + pending.map((item) => item.path).join('\n');
+        await D.messageBox('Redator', 'Não foi possível salvar "' + baseName(path) + '".\n' + why + recovery, undefined, { icon: 'error' });
         return false;
       }
+      // An older document may finish saving after another one was opened.
+      if (this.model !== model) return true;
       this.filePath = path;
       this.importPath = null;
-      if (this.host.statFile) {
+      if (res.stamp) this.fileStamp = { path, ...res.stamp };
+      else if (this.host.statFile) {
         const st = await this.host.statFile(path);
         if (st) this.fileStamp = { path, mtime: st.mtime, size: st.size };
       }
       this.format = fmt;
       this.docName = baseName(path);
       this.model.format = fmt;
-      this.markClean();
-      this.setInfo('Salvo');
+      this.noticedFileStamp = null;
+      const clean = this.markClean(stamp);
+      if (clean && this.clearRecoveryJob) await this.clearRecoveryJob;
+      this.setInfo(clean ? 'Salvo' : 'Versão salva; há novas alterações para salvar');
       return true;
     } catch (err) {
       this.showError('Não foi possível salvar o documento.', err);
@@ -768,18 +862,27 @@ class App {
     } finally {
       this.saving = false;
       this.setBusy(null);
+      if (this.dirty) this.saveRecovery(true);
     }
   }
 
   async requestClose() {
-    if (!this.dirty) { this.host.closeConfirmed(); return; }
-    const r = await D.confirmSave(this.docName);
-    if (r === 'save') {
-      const ok = await this.save();
-      if (ok) this.host.closeConfirmed();
-    } else if (r === 'discard') {
-      this.host.closeConfirmed();
-    }
+    if (this.closingRequested) return;
+    this.closingRequested = true;
+    try {
+      if (this.saveAsJob) await this.saveAsJob;
+      while (this.saveJob) await this.saveJob;
+      if (this.recoverJob) await this.recoverJob;
+      if (this.clearRecoveryJob) await this.clearRecoveryJob;
+      if (!this.dirty) { this.host.closeConfirmed(); return; }
+      const r = await D.confirmSave(this.docName);
+      if (r === 'save') {
+        const ok = await this.save();
+        if (ok && !this.dirty) this.host.closeConfirmed();
+      } else if (r === 'discard') {
+        this.host.closeConfirmed();
+      }
+    } finally { this.closingRequested = false; }
   }
 
   closeWindow() {
@@ -980,6 +1083,10 @@ class App {
   }
 
   onTransaction(view, tr) {
+    if (view === this.view && tr.before.attrs.pageProperties !== tr.doc.attrs.pageProperties) {
+      restorePageProperties(this.model, tr.doc.attrs.pageProperties || this.initialPageProperties);
+      this.pageChanged(false);
+    }
     if (tr.docChanged) {
       if (view === this.view) {
         this.markDirty();
@@ -1078,7 +1185,7 @@ class App {
     if (!sel.empty && view === this.view) selWords = this.countIn(st.doc.textBetween(sel.from, sel.to, ' ', ' '));
     this.status.update({
       page, pages: this.layout.mode === 'print' ? this.layout.pageCount : 1, words: this.wordCount, selWords, zoom: this.layout.zoom, viewMode: this.viewMode,
-      language: this.languageName(), info: this.infoText || '',
+      language: this.languageName(), info: this.busyText || this.infoText || '',
     });
   }
 
@@ -1133,8 +1240,10 @@ class App {
   }
 
   setBusy(text) {
+    this.busyText = text || '';
     this.root.classList.toggle('busy', !!text);
-    if (text) this.setInfo(text);
+    this.workspace.setAttribute('aria-busy', String(!!text));
+    this.scheduleUI();
   }
 
   showError(msg, err) {
@@ -1208,7 +1317,17 @@ class App {
     this.prefs = { ...this.prefs, ...p };
     await this.host.savePrefs(p);
     if (this.view) this.view.dom.spellcheck = this.prefs.spellcheck !== false;
-    if (p.shortcuts && p.shortcuts !== oldShortcuts) this.setInfo('Atalhos atualizados');
+    if (p.units) { D.setMeasureUnit(p.units); this.ruler.update(); }
+    if (p.shortcuts && p.shortcuts !== oldShortcuts) {
+      const names = { b: 'bold', i: 'italic', u: 'underline', alignLeft: 'alignLeft', alignCenter: 'alignCenter', alignRight: 'alignRight', justify: 'justify', find: 'find', replace: 'replace' };
+      for (const [id, name] of Object.entries(names)) {
+        const control = this.ribbon.controls.get(id)?.el;
+        if (control?.tooltip) control.tooltip.shortcut = this.sc(name);
+      }
+      if (this.saveBtn.tooltip) this.saveBtn.tooltip.shortcut = this.sc('save');
+      if (this.redoBtn.tooltip) this.redoBtn.tooltip.shortcut = this.sc('redo');
+      this.setInfo('Atalhos atualizados');
+    }
     this.scheduleUI();
   }
 
@@ -1379,16 +1498,27 @@ class App {
     else if (kind === 'page') this.setZoom(Math.round(Math.min(w / g.pageW, hgt / g.pageH) * 100) / 100);
   }
 
+  setDocumentReadOnly(value) {
+    this.documentReadOnly = !!value;
+    this.readOnly = this.documentReadOnly || this.viewMode === 'read';
+    if (this.view) {
+      this.view.setProps({});
+      this.view.dom.setAttribute('aria-readonly', String(this.readOnly));
+    }
+    this.root.classList.toggle('document-readonly', this.documentReadOnly);
+    this.scheduleUI();
+  }
+
   setViewMode(mode) {
+    if (!['read', 'print', 'web'].includes(mode) || mode === this.viewMode) return;
+    if (this.documentReadOnly == null) this.documentReadOnly = !!this.readOnly;
     if (this.hfEdit) this.closeHeaderFooter();
     this.viewMode = mode;
     this.root.classList.toggle('mode-web', mode === 'web' || mode === 'read');
     this.root.classList.toggle('mode-read', mode === 'read');
     this.layout.mode = mode === 'print' ? 'print' : 'web';
     this.hostEl.style.zoom = mode === 'print' ? '' : String(this.layout.zoom);
-    if (mode === 'read') { this.readOnlyBefore = this.readOnly; this.readOnly = true; }
-    else if (this.readOnlyBefore != null) { this.readOnly = this.readOnlyBefore; this.readOnlyBefore = null; }
-    if (this.view) this.view.setProps({});
+    this.setDocumentReadOnly(this.documentReadOnly);
     this.layout.pageKeys = [];
     this.layout.invalidate();
     this.layout.updateCanvas();
@@ -1473,11 +1603,22 @@ class App {
 
   onKeyDown(e) {
     if (D.isDialogOpen()) return;
+    if (document.querySelector('.popup')) return;
     const mod = e.ctrlKey || e.metaKey;
     const code = e.code;
     const inInput = !!(e.target && e.target.closest && e.target.closest('input, textarea, select'));
     const stop = () => { e.preventDefault(); e.stopPropagation(); };
     if (this.backstage.isOpen) return;
+    if (e.key === 'F6') {
+      stop();
+      const regions = [this.ribbon.tabs.find((t) => t.id === this.ribbon.active)?.btn, this.nav.visible ? this.nav.input : null, this.view?.dom, this.status.page].filter((el) => el && el.getClientRects().length);
+      const active = document.activeElement;
+      let at = regions.indexOf(active);
+      if (this.ribbon.el.contains(active)) at = 0;
+      if (this.status.el.contains(active)) at = regions.length - 1;
+      regions[(at + (e.shiftKey ? -1 : 1) + regions.length) % regions.length]?.focus();
+      return;
+    }
     if (e.key === 'F12') { stop(); this.saveAs(); return; }
     if (e.key === 'F7') { stop(); this.toggleSpellcheck(); return; }
     if (e.key === 'Escape') {
@@ -1888,17 +2029,17 @@ class App {
   // ------------------------------------------------------------ página
 
   setPageSetup(p) {
-    const s = this.model.section;
-    if (p.margins) s.setMargins(p.margins);
-    if (p.size) s.setPageSize(p.size.w, p.size.h, p.size.orient);
-    if (p.titlePg != null) s.setTitlePg(p.titlePg);
-    if (p.evenOdd != null && p.evenOdd !== !!this.model.settings.evenAndOdd) { this.model.settings.evenAndOdd = p.evenOdd; this.model.settings.dirty = true; }
-    this.pageChanged();
+    this.changePageProperties(() => {
+      const s = this.model.section;
+      if (p.margins) s.setMargins(p.margins);
+      if (p.size) s.setPageSize(p.size.w, p.size.h, p.size.orient);
+      if (p.titlePg != null) s.setTitlePg(p.titlePg);
+      if (p.evenOdd != null && p.evenOdd !== !!this.model.settings.evenAndOdd) { this.model.settings.evenAndOdd = p.evenOdd; this.model.settings.dirty = true; }
+    });
   }
 
   setMargins(preset) {
-    this.model.section.setMargins({ top: preset.top, bottom: preset.bottom, left: preset.left, right: preset.right });
-    this.pageChanged();
+    this.changePageProperties(() => this.model.section.setMargins({ top: preset.top, bottom: preset.bottom, left: preset.left, right: preset.right }));
   }
 
   setOrientation(o) {
@@ -1906,32 +2047,43 @@ class App {
     const w = s.pgSz.w, hh = s.pgSz.h;
     const land = w > hh;
     if ((o === 'landscape') === land) return;
-    s.setPageSize(hh, w, o === 'landscape' ? 'landscape' : null);
-    const m = s.pgMar;
-    s.setMargins(o === 'landscape' ? { top: m.left, bottom: m.right, left: m.bottom, right: m.top } : { top: m.right, bottom: m.left, left: m.top, right: m.bottom });
-    this.pageChanged();
+    this.changePageProperties(() => {
+      s.setPageSize(hh, w, o === 'landscape' ? 'landscape' : null);
+      const m = s.pgMar;
+      s.setMargins(o === 'landscape' ? { top: m.left, bottom: m.right, left: m.bottom, right: m.top } : { top: m.right, bottom: m.left, left: m.top, right: m.bottom });
+    });
   }
 
   setPaper(p) {
-    const s = this.model.section;
-    const land = s.pgSz.w > s.pgSz.h;
-    s.setPageSize(land ? p.h : p.w, land ? p.w : p.h, land ? 'landscape' : null);
-    this.pageChanged();
+    this.changePageProperties(() => {
+      const s = this.model.section;
+      const land = s.pgSz.w > s.pgSz.h;
+      s.setPageSize(land ? p.h : p.w, land ? p.w : p.h, land ? 'landscape' : null);
+    });
   }
 
-  setTitlePage(on) { this.model.section.setTitlePg(on); this.pageChanged(); }
+  setTitlePage(on) { this.changePageProperties(() => this.model.section.setTitlePg(on)); }
 
-  setEvenOdd(on) { this.model.settings.evenAndOdd = on; this.model.settings.dirty = true; this.pageChanged(); }
+  setEvenOdd(on) { this.changePageProperties(() => { this.model.settings.evenAndOdd = on; this.model.settings.dirty = true; }); }
 
   setDefaultTabStop(tw) {
-    this.model.settings.defaultTabStop = tw;
-    this.model.settings.dirty = true;
-    this.refreshStyles();
-    this.markDirty();
+    this.changePageProperties(() => {
+      this.model.settings.defaultTabStop = tw;
+      this.model.settings.dirty = true;
+    });
   }
 
-  pageChanged() {
-    this.markDirty();
+  changePageProperties(action) {
+    if (!this.view || this.readOnly) return;
+    const before = pageProperties(this.model);
+    action();
+    const after = pageProperties(this.model);
+    if (JSON.stringify(before) === JSON.stringify(after)) return;
+    this.view.dispatch(closeHistory(this.view.state.tr).setDocAttribute('pageProperties', after));
+  }
+
+  pageChanged(mark = true) {
+    if (mark) this.markDirty();
     this.applyDocCss();
     this.layout.invalidateStatic();
     this.layout.computeGeometry();
@@ -2063,8 +2215,7 @@ class App {
     const r = await new D.Dialog('Formatar Números de Página', h('div', {}, D.field('Formato do número:', fmt), D.field('Iniciar em:', inp)), [{ label: 'OK', primary: true, value: 'ok' }, { label: 'Cancelar', value: null }], { className: 'dlg-small' }).open();
     if (r !== 'ok') return;
     const n = parseInt(inp.value, 10);
-    this.model.section.setPageNumbering(fmt.value === 'decimal' ? null : fmt.value, Number.isFinite(n) ? n : null);
-    this.pageChanged();
+    this.changePageProperties(() => this.model.section.setPageNumbering(fmt.value === 'decimal' ? null : fmt.value, Number.isFinite(n) ? n : null));
   }
 
   // ------------------------------------------------------------ sumário

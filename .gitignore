@@ -4,6 +4,8 @@ node_modules/
 # saída do build: dist tem o bundle da janela, out tem o app empacotado e o instalador
 dist/
 out/
+tests-results/
+temp/
 
 # arquivos temporários de gravação do próprio Redator
 *.redator-tmp

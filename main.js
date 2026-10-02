@@ -5,6 +5,12 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { execFile } = require('child_process');
+const { createFileStore, hashBytes } = require('./services/file-store.cjs');
+const { createTrustedIpc } = require('./services/trusted-ipc.cjs');
+const { createLineHelper } = require('./services/line-helper.cjs');
+const { normalizePreferences } = require('./services/preferences.cjs');
+const { encodeSnapshot, readRecovery, scanRecovery: findRecovery, recoveryFiles, RECOVER_ID } = require('./services/recovery-snapshot.cjs');
+const fileStore = createFileStore();
 
 const APP_NAME = 'Redator';
 const TITLE_BAR_COLOR = '#185abd';
@@ -34,15 +40,31 @@ const recoverDir = path.join(userData, 'Recuperacao');
 // ---------------------------------------------------------------- utilidades
 
 function readJson(file, fallback) {
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; }
+  try {
+    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!value || typeof value !== 'object' || Array.isArray(value) !== Array.isArray(fallback)) return fallback;
+    return value;
+  } catch { return fallback; }
 }
 
 function writeJson(file, value) {
+  const tmp = file + '.' + require('crypto').randomUUID() + '.tmp';
+  let fd;
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(value, null, 2), 'utf8');
+    fd = fs.openSync(tmp, 'wx');
+    fs.writeFileSync(fd, JSON.stringify(value, null, 2), 'utf8');
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = undefined;
+    fs.renameSync(tmp, file);
+    return true;
   } catch (err) {
     console.error('Falha ao gravar', file, err);
+    return false;
+  } finally {
+    if (fd !== undefined) { try { fs.closeSync(fd); } catch { /* encerrado */ } }
+    try { fs.unlinkSync(tmp); } catch { /* publicado ou não criado */ }
   }
 }
 
@@ -69,11 +91,13 @@ function filesFromArgv(argv, cwd) {
 
 function getRecent() {
   const list = readJson(recentFile, []);
-  return list.filter((r) => r && r.path);
+  return list.filter((r) => r && typeof r.path === 'string' && r.path).slice(0, 40).map((r) => ({
+    path: r.path, name: path.basename(r.path), folder: path.dirname(r.path), time: Number.isFinite(r.time) ? r.time : 0,
+  }));
 }
 
 function addRecent(p) {
-  if (!p) return getRecent();
+  if (typeof p !== 'string' || !p) return getRecent();
   const list = getRecent().filter((r) => r.path.toLowerCase() !== p.toLowerCase());
   list.unshift({ path: p, name: path.basename(p), folder: path.dirname(p), time: Date.now() });
   const trimmed = list.slice(0, 40);
@@ -93,51 +117,53 @@ function removeRecent(p) {
 // quando a janela fecha normalmente; se o programa ou o PC cair, ela fica e é
 // oferecida na próxima abertura.
 
-const RECOVER_ID = /^[a-z0-9-]{4,40}$/;
 let leftovers = [];
+const recoveryCleanup = new Set();
+let waitingForCleanup = false;
+
+app.on('will-quit', (event) => {
+  if (!recoveryCleanup.size) return;
+  event.preventDefault();
+  if (waitingForCleanup) return;
+  waitingForCleanup = true;
+  (async () => {
+    while (recoveryCleanup.size) await Promise.allSettled([...recoveryCleanup]);
+    waitingForCleanup = false;
+    app.quit();
+  })();
+});
 
 function recoverFiles(id) {
-  return { data: path.join(recoverDir, id + '.dados'), meta: path.join(recoverDir, id + '.json') };
+  return recoveryFiles(recoverDir, id);
 }
 
 function removeRecovery(id) {
-  if (!RECOVER_ID.test(String(id))) return;
+  if (typeof id !== 'string' || !RECOVER_ID.test(id)) return Promise.resolve();
   const f = recoverFiles(id);
-  for (const p of [f.data, f.meta, f.data + '.tmp', f.meta + '.tmp']) {
-    try { fs.unlinkSync(p); } catch { /* já não existe */ }
-  }
+  const paths = [f.snapshot, f.data, f.meta, f.data + '.tmp', f.meta + '.tmp'];
+  const job = fileStore.enqueue(paths, async () => {
+    for (const p of paths) {
+      try { await fs.promises.unlink(p); }
+      catch (err) { if (err.code !== 'ENOENT') console.warn('Falha ao apagar a recuperação:', err.message); }
+    }
+  });
+  recoveryCleanup.add(job);
+  job.then(() => recoveryCleanup.delete(job), () => recoveryCleanup.delete(job));
+  return job;
 }
 
 function scanRecovery() {
-  let names = [];
-  try { names = fs.readdirSync(recoverDir); } catch { return []; }
-  const out = [];
-  for (const n of names) {
-    const m = /^([a-z0-9-]+)\.json$/.exec(n);
-    if (!m) continue;
-    const meta = readJson(path.join(recoverDir, n), null);
-    let size = 0;
-    try { size = fs.statSync(recoverFiles(m[1]).data).size; } catch { /* sem dados */ }
-    if (meta && size) out.push({ id: m[1], name: meta.name || 'Documento', path: meta.path || null, time: meta.time || 0 });
-    else removeRecovery(m[1]);
-  }
-  // sobras de uma gravação interrompida antes de a ficha existir
-  for (const n of names) {
-    const m = /^([a-z0-9-]+)\.(dados|json)\.tmp$|^([a-z0-9-]+)\.dados$/.exec(n);
-    const id = m && (m[1] || m[3]);
-    if (id && !out.some((e) => e.id === id)) { try { fs.unlinkSync(path.join(recoverDir, n)); } catch { /* ignora */ } }
-  }
-  return out.sort((a, b) => b.time - a.time);
-}
-
-async function writeAtomic(p, data) {
-  await fs.promises.writeFile(p + '.tmp', data);
-  await fs.promises.rename(p + '.tmp', p);
+  return findRecovery(recoverDir);
 }
 
 // ---------------------------------------------------------------- janelas
 
 const windows = new Set();
+const trustedIpc = createTrustedIpc(ipcMain, {
+  windows,
+  getWindow: windowFor,
+  appUrl: require('url').pathToFileURL(path.join(__dirname, 'app', 'index.html')).href,
+});
 
 function nextBounds() {
   const saved = readJson(windowStateFile, null);
@@ -185,6 +211,8 @@ function createWindow(filePath, opts = {}) {
 
   win.docState = { filePath: filePath || null, dirty: false, allowClose: false, recover: opts.recover || null, crashes: 0 };
   win.recoverId = null;
+  win.recoveryEpoch = 0;
+  win.recoveryClaim = null;
   windows.add(win);
 
   win.loadFile(path.join(__dirname, 'app', 'index.html'));
@@ -203,11 +231,14 @@ function createWindow(filePath, opts = {}) {
     }
   });
 
-  win.on('closed', () => {
+  win.on('closed', async () => {
     windows.delete(win);
     // fechou pelo caminho normal: o usuário salvou ou escolheu não salvar
     const decided = !win.docState.dirty || win.docState.allowClose;
-    if (win.recoverId && decided && !win.keepRecovery) removeRecovery(win.recoverId);
+    if (decided && !win.keepRecovery) {
+      win.recoveryEpoch++;
+      if (win.recoverId && !win.recoveryClaim) await removeRecovery(win.recoverId);
+    }
   });
   // desligamento do Windows: a cópia fica para a próxima abertura
   win.on('session-end', () => { win.keepRecovery = true; });
@@ -225,7 +256,10 @@ function createWindow(filePath, opts = {}) {
     st.dirty = false;
     // se a mesma falha se repetir, deixa a janela fechar em vez de recarregar sem fim
     if (++st.crashes > 2) { st.allowClose = true; win.keepRecovery = true; return; }
-    if (win.recoverId && fs.existsSync(recoverFiles(win.recoverId).meta)) st.recover = win.recoverId;
+    if (win.recoverId) {
+      const f = recoverFiles(win.recoverId);
+      if (fs.existsSync(f.snapshot) || fs.existsSync(f.meta)) st.recover = win.recoverId;
+    }
     setTimeout(() => { if (!win.isDestroyed()) wc.reload(); }, 400);
   });
   wc.setWindowOpenHandler(({ url }) => {
@@ -309,12 +343,13 @@ app.on('window-all-closed', () => { app.quit(); });
 
 function configureSpellchecker() {
   const ses = session.defaultSession;
-  const prefs = readJson(prefsFile, {});
+  const prefs = normalizePreferences(readJson(prefsFile, {}));
   const wanted = prefs.spellLanguages || ['pt-BR'];
   try {
     const available = ses.availableSpellCheckerLanguages || [];
     const langs = wanted.filter((l) => !available.length || available.includes(l));
     ses.setSpellCheckerLanguages(langs.length ? langs : wanted);
+    spellLang = langs[0] || wanted[0] || 'pt-BR';
   } catch (err) {
     console.warn('Idiomas de ortografia indisponíveis', err.message);
   }
@@ -326,7 +361,7 @@ function configureSpellchecker() {
 
 // ---------------------------------------------------------------- IPC
 
-ipcMain.handle('app:init', (event) => {
+trustedIpc.handle('app:init', (event) => {
   const win = windowFor(event);
   const recover = win ? win.docState.recover : null;
   if (win) win.docState.recover = null;
@@ -340,104 +375,119 @@ ipcMain.handle('app:init', (event) => {
     recent: getRecent(),
     version: app.getVersion(),
     userName: os.userInfo().username,
-    prefs: readJson(prefsFile, {}),
+    prefs: normalizePreferences(readJson(prefsFile, {})),
     platform: process.platform,
   };
 });
 
-ipcMain.handle('recover:save', async (event, data, meta) => {
+trustedIpc.handle('recover:save', async (event, data, meta) => {
   const win = windowFor(event);
-  if (!win) return false;
+  if (!win || win.recoveryClaim) return false;
   if (!win.recoverId) win.recoverId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
   const f = recoverFiles(win.recoverId);
+  const id = win.recoverId;
+  const epoch = win.recoveryEpoch;
   try {
     await fs.promises.mkdir(recoverDir, { recursive: true });
-    await writeAtomic(f.data, Buffer.from(data));
-    await writeAtomic(f.meta, JSON.stringify({ ...meta, time: Date.now() }));
-    return win.recoverId;
+    if (win.recoveryEpoch !== epoch || win.recoverId !== id) return null;
+    const packet = encodeSnapshot(data, meta);
+    const result = await fileStore.writeFile(f.snapshot, packet);
+    if (!result.ok) throw new Error(result.error);
+    if (win.recoveryEpoch !== epoch || win.recoverId !== id) {
+      if (!win.recoveryClaim || win.recoveryClaim.previous !== id) await removeRecovery(id);
+      return null;
+    }
+    return id;
   } catch (err) {
     console.warn('Falha na AutoRecuperação', err.message);
     return null;
   }
 });
 
-ipcMain.on('recover:clear', (event) => {
+trustedIpc.handle('recover:clear', async (event) => {
   const win = windowFor(event);
-  if (win && win.recoverId) removeRecovery(win.recoverId);
+  if (win && !win.recoveryClaim) {
+    win.recoveryEpoch++;
+    if (win.recoverId) await removeRecovery(win.recoverId);
+  }
+  return true;
 });
 
 // a janela assume a cópia: as próximas gravações vão para ela e fechar normalmente a apaga
-ipcMain.handle('recover:take', async (event, id) => {
+trustedIpc.handle('recover:take', async (event, id) => {
   const win = windowFor(event);
-  if (!win || !RECOVER_ID.test(String(id))) return null;
+  if (!win || win.recoveryClaim || typeof id !== 'string' || !RECOVER_ID.test(id)) return null;
   if ([...windows].some((w) => w !== win && w.recoverId === id)) return null;
-  const f = recoverFiles(id);
+  const previous = win.recoverId;
+  // Claim before disk I/O so two windows cannot take the same copy.
+  win.recoveryClaim = { id, previous };
+  win.recoverId = id;
   try {
-    const meta = JSON.parse(await fs.promises.readFile(f.meta, 'utf8'));
-    const data = await fs.promises.readFile(f.data);
-    if (win.recoverId && win.recoverId !== id) removeRecovery(win.recoverId);
-    win.recoverId = id;
+    const { meta, data } = await readRecovery(recoverDir, id);
     return { meta, data: new Uint8Array(data.buffer, data.byteOffset, data.byteLength) };
   } catch {
+    if (win.recoverId === id) win.recoverId = previous;
+    win.recoveryClaim = null;
     return null;
   }
 });
 
-ipcMain.handle('recover:open', (_e, id) => {
-  if (RECOVER_ID.test(String(id))) createWindow(null, { recover: id });
+// Adoption completes only after the renderer parsed the document successfully.
+// Until then, closing the window preserves the original recovery copy.
+trustedIpc.handle('recover:confirm', async (event, id) => {
+  const win = windowFor(event);
+  if (!win || !win.recoveryClaim || win.recoveryClaim.id !== id) return false;
+  const { previous } = win.recoveryClaim;
+  win.recoveryClaim = null;
+  if (previous && previous !== id) await removeRecovery(previous);
   return true;
 });
 
-ipcMain.handle('recover:discard', (_e, ids) => {
+trustedIpc.handle('recover:release', (event, id) => {
+  const win = windowFor(event);
+  if (!win || !win.recoveryClaim || win.recoveryClaim.id !== id) return false;
+  win.recoverId = win.recoveryClaim.previous;
+  win.recoveryClaim = null;
+  return true;
+});
+
+trustedIpc.handle('recover:open', (_e, id) => {
+  if (typeof id !== 'string' || !RECOVER_ID.test(id)) return false;
+  const opened = [...windows].find((w) => w.recoverId === id || w.docState.recover === id);
+  if (opened) { if (!HIDDEN_TEST) opened.focus(); return true; }
+  createWindow(null, { recover: id });
+  return true;
+});
+
+trustedIpc.handle('recover:discard', async (_e, ids) => {
   for (const id of Array.isArray(ids) ? ids : []) {
-    if (![...windows].some((w) => w.recoverId === id)) removeRecovery(id);
+    if (![...windows].some((w) => w.recoverId === id || w.docState.recover === id)) await removeRecovery(id);
   }
   return true;
 });
 
-ipcMain.handle('file:read', async (_event, p) => {
+trustedIpc.handle('file:read', async (_event, p) => {
   const data = await fs.promises.readFile(p);
   let readonly = false;
   try { await fs.promises.access(p, fs.constants.W_OK); } catch { readonly = true; }
   const st = await fs.promises.stat(p);
-  return { data: new Uint8Array(data.buffer, data.byteOffset, data.byteLength), readonly, mtime: st.mtimeMs, size: st.size, name: path.basename(p), dir: path.dirname(p) };
+  return { data: new Uint8Array(data.buffer, data.byteOffset, data.byteLength), readonly, mtime: st.mtimeMs, size: st.size, hash: hashBytes(data), name: path.basename(p), dir: path.dirname(p) };
 });
 
-ipcMain.handle('file:stat', async (_event, p) => {
+trustedIpc.handle('file:stat', async (_event, p) => {
   try { const st = await fs.promises.stat(p); return st.isFile() ? { mtime: st.mtimeMs, size: st.size } : null; } catch { return null; }
 });
 
-ipcMain.handle('file:exists', (_event, p) => {
+trustedIpc.handle('file:exists', (_event, p) => {
   try { return fs.statSync(p).isFile(); } catch { return false; }
 });
 
-ipcMain.handle('file:write', async (_event, p, data, extras) => {
-  const buf = typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data);
-  const tmp = p + '.' + process.pid + '.redator-tmp';
-  try {
-    await fs.promises.writeFile(tmp, buf);
-    await fs.promises.rename(tmp, p);
-  } catch (err) {
-    try { await fs.promises.unlink(tmp); } catch { /* ignora */ }
-    if (err.code === 'EPERM' || err.code === 'EBUSY' || err.code === 'EACCES') {
-      // tenta gravar direto, alguns locais bloqueiam o rename
-      try { await fs.promises.writeFile(p, buf); } catch (err2) { return { ok: false, error: err2.code || err2.message }; }
-    } else {
-      return { ok: false, error: err.code || err.message };
-    }
-  }
-  if (Array.isArray(extras)) {
-    for (const ex of extras) {
-      try {
-        const full = path.resolve(path.dirname(p), ex.path);
-        await fs.promises.mkdir(path.dirname(full), { recursive: true });
-        await fs.promises.writeFile(full, Buffer.from(ex.data));
-      } catch (err) { console.warn('Falha ao gravar arquivo auxiliar', ex.path, err); }
-    }
-  }
+trustedIpc.handle('file:write', async (_event, p, data, extras, options) => {
+  const result = await fileStore.writeFile(p, data, extras, options);
+  if (!result.ok) return result;
   // imagens e outros arquivos salvos à parte não entram na lista de recentes
   if (SUPPORTED.includes(path.extname(p).toLowerCase())) addRecent(p);
-  return { ok: true };
+  return result;
 });
 
 // ---------------------------------------------------------------- notas do Obsidian
@@ -478,7 +528,7 @@ function listVault(root) {
   return files;
 }
 
-ipcMain.handle('file:find-note', (_e, from, target) => {
+trustedIpc.handle('file:find-note', (_e, from, target) => {
   if (!from) return null;
   const name = String(target || '').split('#')[0].split('^')[0].trim();
   if (!name) return from;
@@ -504,7 +554,7 @@ ipcMain.handle('file:find-note', (_e, from, target) => {
   return best;
 });
 
-ipcMain.handle('file:open-dialog', async (event, opts = {}) => {
+trustedIpc.handle('file:open-dialog', async (event, opts = {}) => {
   const win = windowFor(event);
   const res = await dialog.showOpenDialog(win, {
     title: opts.title || 'Abrir',
@@ -530,7 +580,7 @@ ipcMain.handle('file:open-dialog', async (event, opts = {}) => {
   return res.canceled ? [] : res.filePaths;
 });
 
-ipcMain.handle('file:image-dialog', async (event) => {
+trustedIpc.handle('file:image-dialog', async (event) => {
   const win = windowFor(event);
   const res = await dialog.showOpenDialog(win, {
     title: 'Inserir Imagem',
@@ -549,7 +599,7 @@ ipcMain.handle('file:image-dialog', async (event) => {
   return out;
 });
 
-ipcMain.handle('file:save-dialog', async (event, opts = {}) => {
+trustedIpc.handle('file:save-dialog', async (event, opts = {}) => {
   const win = windowFor(event);
   const res = await dialog.showSaveDialog(win, {
     title: opts.title || 'Salvar como',
@@ -559,66 +609,66 @@ ipcMain.handle('file:save-dialog', async (event, opts = {}) => {
   return res.canceled ? null : res.filePath;
 });
 
-ipcMain.handle('file:pick-folder', async (event) => {
+trustedIpc.handle('file:pick-folder', async (event) => {
   const win = windowFor(event);
   const res = await dialog.showOpenDialog(win, { properties: ['openDirectory'] });
   return res.canceled ? null : res.filePaths[0];
 });
 
-ipcMain.on('app:set-doc-state', (event, st) => {
+trustedIpc.on('app:set-doc-state', (event, st) => {
   const win = windowFor(event);
-  if (!win) return;
-  if ('filePath' in st) win.docState.filePath = st.filePath;
-  if ('dirty' in st) win.docState.dirty = !!st.dirty;
-  if (st.title) win.setTitle(st.title);
-  if (st.filePath && st.addRecent) addRecent(st.filePath);
+  if (!win || !st || typeof st !== 'object' || Array.isArray(st)) return;
+  if (st.filePath === null || typeof st.filePath === 'string') win.docState.filePath = st.filePath;
+  if (typeof st.dirty === 'boolean') win.docState.dirty = st.dirty;
+  if (typeof st.title === 'string' && st.title) win.setTitle(st.title);
+  if (typeof st.filePath === 'string' && st.filePath && st.addRecent === true) addRecent(st.filePath);
 });
 
-ipcMain.handle('app:recent', () => getRecent());
-ipcMain.handle('app:recent-add', (_e, p) => addRecent(p));
-ipcMain.handle('app:recent-remove', (_e, p) => removeRecent(p));
+trustedIpc.handle('app:recent', () => getRecent());
+trustedIpc.handle('app:recent-add', (_e, p) => addRecent(p));
+trustedIpc.handle('app:recent-remove', (_e, p) => removeRecent(p));
 
-ipcMain.handle('app:new-window', (_e, p) => {
+trustedIpc.handle('app:new-window', (_e, p) => {
   if (p) openFileInNewWindow(p);
   else createWindow(null);
   return true;
 });
 
-ipcMain.on('app:close-confirmed', (event) => {
+trustedIpc.on('app:close-confirmed', (event) => {
   const win = windowFor(event);
   if (!win) return;
   win.docState.allowClose = true;
   win.close();
 });
 
-ipcMain.on('app:close-window', (event) => {
+trustedIpc.on('app:close-window', (event) => {
   const win = windowFor(event);
   if (win) win.close();
 });
 
-ipcMain.on('app:quit', () => app.quit());
+trustedIpc.on('app:quit', () => app.quit());
 
-ipcMain.on('app:set-overlay', (event, colors) => {
+trustedIpc.on('app:set-overlay', (event, colors) => {
   const win = windowFor(event);
-  if (!win || !win.setTitleBarOverlay) return;
+  if (!win || !win.setTitleBarOverlay || !colors || typeof colors !== 'object') return;
   try { win.setTitleBarOverlay({ color: colors.color || TITLE_BAR_COLOR, symbolColor: colors.symbolColor || '#ffffff', height: 40 }); } catch { /* ignora */ }
 });
 
-ipcMain.handle('app:save-prefs', (_e, prefs) => {
-  const cur = readJson(prefsFile, {});
-  const next = { ...cur, ...prefs };
-  writeJson(prefsFile, next);
+trustedIpc.handle('app:save-prefs', (_e, prefs) => {
+  const cur = normalizePreferences(readJson(prefsFile, {}));
+  const next = { ...cur, ...normalizePreferences(prefs) };
+  if (!writeJson(prefsFile, next)) throw new Error('Não foi possível guardar as preferências.');
   return next;
 });
 
-ipcMain.handle('app:print', (event) => {
+trustedIpc.handle('app:print', (event) => {
   const win = windowFor(event);
   return new Promise((resolve) => {
     win.webContents.print({ silent: false, printBackground: true, margins: { marginType: 'none' } }, (ok, reason) => resolve({ ok, reason }));
   });
 });
 
-ipcMain.handle('app:export-pdf', async (event, p, opts = {}) => {
+trustedIpc.handle('app:export-pdf', async (event, p, opts = {}) => {
   const win = windowFor(event);
   try {
     const data = await win.webContents.printToPDF({
@@ -630,19 +680,18 @@ ipcMain.handle('app:export-pdf', async (event, p, opts = {}) => {
       generateDocumentOutline: true,
       generateTaggedPDF: true,
     });
-    await fs.promises.writeFile(p, data);
-    return { ok: true };
+    return await fileStore.writeFile(p, data);
   } catch (err) {
     return { ok: false, error: err.message };
   }
 });
 
-ipcMain.handle('shell:open-external', (_e, url) => {
+trustedIpc.handle('shell:open-external', (_e, url) => {
   if (/^(https?|mailto):/i.test(url)) return shell.openExternal(url);
   return false;
 });
 
-ipcMain.handle('shell:open-path', (_e, p) => shell.openPath(p));
+trustedIpc.handle('shell:open-path', (_e, p) => shell.openPath(p));
 
 // ---------------------------------------------------------------- aplicativo padrão
 // O Windows não deixa um programa se declarar padrão: mostra para que tipos o
@@ -661,7 +710,7 @@ function userChoice(ext) {
   return query('UserChoiceLatest').then((v) => v || query('UserChoice'));
 }
 
-ipcMain.handle('app:default-status', async () => {
+trustedIpc.handle('app:default-status', async () => {
   if (process.platform !== 'win32') return {};
   const out = {};
   await Promise.all(DEFAULT_EXTS.map(async (e) => {
@@ -672,7 +721,7 @@ ipcMain.handle('app:default-status', async () => {
 });
 
 // PDF convertido: o original abre no visualizador de PDF do Chromium, fiel ao arquivo
-ipcMain.handle('pdf:view-original', (event, p) => {
+trustedIpc.handle('pdf:view-original', (event, p) => {
   if (!p || !/\.pdf$/i.test(p) || !isSupportedFile(p)) return false;
   const parent = windowFor(event);
   const pb = parent && !parent.isDestroyed() ? parent.getBounds() : { x: undefined, y: undefined, width: 1100, height: 860 };
@@ -696,37 +745,40 @@ ipcMain.handle('pdf:view-original', (event, p) => {
   return true;
 });
 
-ipcMain.handle('app:open-default-apps', async () => {
+trustedIpc.handle('app:open-default-apps', async () => {
   try { await shell.openExternal('ms-settings:defaultapps?registeredAppUser=Redator'); } catch {
     try { await shell.openExternal('ms-settings:defaultapps'); } catch { return false; }
   }
   return true;
 });
-ipcMain.handle('shell:show-item', (_e, p) => { shell.showItemInFolder(p); return true; });
+trustedIpc.handle('shell:show-item', (_e, p) => { shell.showItemInFolder(p); return true; });
 
-ipcMain.on('edit:action', (event, action) => {
+trustedIpc.on('edit:action', (event, action) => {
   const allowed = ['cut', 'copy', 'paste', 'pasteAndMatchStyle', 'selectAll', 'delete'];
   if (allowed.includes(action)) event.sender[action]();
 });
 
-ipcMain.on('spell:replace', (event, word) => { event.sender.replaceMisspelling(word); });
-ipcMain.on('spell:add', (_event, word) => { session.defaultSession.addWordToSpellCheckerDictionary(word); });
-ipcMain.handle('spell:languages', () => ({
+trustedIpc.on('spell:replace', (event, word) => { event.sender.replaceMisspelling(word); });
+trustedIpc.on('spell:add', (_event, word) => { session.defaultSession.addWordToSpellCheckerDictionary(word); });
+trustedIpc.handle('spell:languages', () => ({
   available: session.defaultSession.availableSpellCheckerLanguages || [],
   current: session.defaultSession.getSpellCheckerLanguages(),
 }));
-ipcMain.handle('spell:set-languages', (_e, langs) => {
+trustedIpc.handle('spell:set-languages', (_e, langs) => {
   try {
+    if (!Array.isArray(langs) || langs.some((lang) => typeof lang !== 'string' || !session.defaultSession.availableSpellCheckerLanguages.includes(lang))) return false;
     session.defaultSession.setSpellCheckerLanguages(langs);
-    const cur = readJson(prefsFile, {});
+    const cur = normalizePreferences(readJson(prefsFile, {}));
     writeJson(prefsFile, { ...cur, spellLanguages: langs });
+    spellLang = langs[0] || 'pt-BR';
+    spellHelper.stop();
     return true;
   } catch (err) { return false; }
 });
 
-ipcMain.handle('fonts:list', () => listSystemFonts());
+trustedIpc.handle('fonts:list', () => listSystemFonts());
 
-ipcMain.handle('image:convert', (_e, data, ext, width, height) => convertImage(data, ext, width, height));
+trustedIpc.handle('image:convert', (_e, data, ext, width, height) => convertImage(data, ext, width, height));
 
 // ---------------------------------------------------------------- modo de teste local
 // Ativado só com a variável REDATOR_TEST apontando para um script de teste.
@@ -761,6 +813,12 @@ function attachTestHarness(win) {
         const img = await wc.capturePage(undefined, { stayHidden: true });
         fs.writeFileSync(path.join(outDir, arg), img.toPNG());
         console.log('TEST shot', arg);
+        await wc.executeJavaScript('window.__shotsDone = (window.__shotsDone || 0) + 1', true);
+      } else if (cmd === 'RESIZE') {
+        const size = JSON.parse(arg);
+        win.setMinimumSize(320, 320);
+        win.setContentSize(Math.max(320, Math.round(size.width)), Math.max(320, Math.round(size.height)));
+        await wc.executeJavaScript('window.__resizeDone = (window.__resizeDone || 0) + 1', true);
       } else if (cmd === 'KEYS') {
         for (const ev of JSON.parse(arg)) {
           if (ev.wait) { await sleep(ev.wait); continue; }
@@ -868,13 +926,10 @@ public static class RSpell {
   public static void Add(string word) { checker.Add(word); }
 }`;
 
-let spellProc = null;
-let spellQueue = [];
-let spellBuf = '';
 let spellLang = 'pt-BR';
 
-function startSpellHelper() {
-  if (spellProc || process.platform !== 'win32') return;
+const spellHelper = createLineHelper({ timeout: 8000, skipLine: (line) => line.startsWith('init\t'), spawn: () => {
+  if (process.platform !== 'win32') return null;
   const script = [
     '[Console]::InputEncoding = [Text.Encoding]::UTF8',
     '[Console]::OutputEncoding = [Text.Encoding]::UTF8',
@@ -885,50 +940,32 @@ function startSpellHelper() {
     '  try { if ($l.StartsWith("+")) { [RSpell]::Add($l.Substring(1)); $o = "added" } else { $o = [RSpell]::Query($l) } } catch { $o = "err`t" + $_.Exception.Message }',
     '  [Console]::Out.WriteLine($o); [Console]::Out.Flush() }',
   ].join('\n');
-  try {
-    const encoded = Buffer.from(script, 'utf16le').toString('base64');
-    spellProc = require('child_process').spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
-  } catch { spellProc = null; return; }
-  spellProc.stdout.setEncoding('utf8');
-  spellProc.stdout.on('data', (chunk) => {
-    spellBuf += chunk;
-    let i;
-    while ((i = spellBuf.indexOf('\n')) >= 0) {
-      const line = spellBuf.slice(0, i).replace(/\r$/, '');
-      spellBuf = spellBuf.slice(i + 1);
-      if (line.startsWith('init\t')) continue;
-      const job = spellQueue.shift();
-      if (job) job(line);
-    }
-  });
-  spellProc.on('exit', () => { spellProc = null; for (const j of spellQueue) j(''); spellQueue = []; });
-}
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  return require('child_process').spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
+} });
+
+function startSpellHelper() { spellHelper.start(); }
 
 function spellQuery(line) {
-  startSpellHelper();
-  if (!spellProc) return Promise.resolve('');
-  return new Promise((resolve) => {
-    const t = setTimeout(() => resolve(''), 8000);
-    spellQueue.push((out) => { clearTimeout(t); resolve(out); });
-    spellProc.stdin.write(line.replace(/[\r\n]/g, ' ') + '\n');
-  });
+  return spellHelper.query(line);
 }
 
-ipcMain.handle('spell:suggest', async (_e, word) => {
+trustedIpc.handle('spell:suggest', async (_e, word) => {
   const out = await spellQuery(String(word || ''));
   const parts = out.split('\t');
   if (parts[0] !== '1' && parts[0] !== '0') return { misspelled: false, suggestions: [] };
   return { misspelled: parts[0] === '1', suggestions: parts.slice(1).filter(Boolean) };
 });
 
-ipcMain.handle('spell:add-word', async (_e, word) => {
+trustedIpc.handle('spell:add-word', async (_e, word) => {
   await spellQuery('+' + String(word || ''));
   try { session.defaultSession.addWordToSpellCheckerDictionary(word); } catch { /* ignora */ }
   return true;
 });
 
 app.on('will-quit', () => {
-  for (const p of [spellProc, ocrProc]) if (p) { try { p.kill(); } catch { /* ignora */ } }
+  spellHelper.stop();
+  ocrHelper.stop();
 });
 
 // ---------------------------------------------------------------- reconhecimento de texto
@@ -978,41 +1015,17 @@ const OCR_PS = [
   '}',
 ].join('\n');
 
-let ocrProc = null;
-let ocrQueue = [];
-let ocrBuf = '';
-
-function startOcrHelper() {
-  if (ocrProc || process.platform !== 'win32') return;
-  try {
-    const encoded = Buffer.from(OCR_PS, 'utf16le').toString('base64');
-    ocrProc = require('child_process').spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
-  } catch { ocrProc = null; return; }
-  ocrProc.stdout.setEncoding('utf8');
-  ocrProc.stdout.on('data', (chunk) => {
-    ocrBuf += chunk;
-    let i;
-    while ((i = ocrBuf.indexOf('\n')) >= 0) {
-      const line = ocrBuf.slice(0, i).replace(/\r$/, '');
-      ocrBuf = ocrBuf.slice(i + 1);
-      const job = ocrQueue.shift();
-      if (job) job(line);
-    }
-  });
-  ocrProc.on('exit', () => { ocrProc = null; for (const j of ocrQueue) j(''); ocrQueue = []; });
-}
+const ocrHelper = createLineHelper({ timeout: 90000, spawn: () => {
+  if (process.platform !== 'win32') return null;
+  const encoded = Buffer.from(OCR_PS, 'utf16le').toString('base64');
+  return require('child_process').spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
+} });
 
 function ocrQuery(file) {
-  startOcrHelper();
-  if (!ocrProc) return Promise.resolve('');
-  return new Promise((resolve) => {
-    const t = setTimeout(() => resolve(''), 90000);
-    ocrQueue.push((out) => { clearTimeout(t); resolve(out); });
-    ocrProc.stdin.write(file + '\n');
-  });
+  return ocrHelper.query(file);
 }
 
-ipcMain.handle('ocr:image', async (_e, data, ext) => {
+trustedIpc.handle('ocr:image', async (_e, data, ext) => {
   if (process.platform !== 'win32') return { err: 'O reconhecimento de texto só existe no Windows.' };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'redator-ocr-'));
   const file = path.join(dir, 'pagina.' + (ext === 'png' ? 'png' : 'jpg'));

@@ -1,6 +1,6 @@
 // Régua horizontal com recuos arrastáveis, em centímetros.
 import { h } from './dom.js';
-import { TWIP_PER_CM } from '../util/units.js';
+import { TWIP_PER_CM, fmtNumber } from '../util/units.js';
 
 export class Ruler {
   constructor(app) {
@@ -60,8 +60,10 @@ export class Ruler {
     ctx.fillRect(x0 + geo.mLeft, top, geo.contentW, bandH);
     ctx.strokeStyle = '#b8b8b8';
     ctx.strokeRect(x0 + 0.5, top + 0.5, x1 - x0 - 1, bandH - 1);
-    // marcações a cada 0,25 cm
-    const cmPx = (TWIP_PER_CM / 15) * geo.z;
+    const unit = this.app.prefs.units || 'cm';
+    const unitTw = unit === 'in' ? 1440 : unit === 'pt' ? 20 : TWIP_PER_CM;
+    const unitPx = (unitTw / 15) * geo.z;
+    this.el.setAttribute('aria-label', 'Régua em ' + (unit === 'in' ? 'polegadas' : unit === 'pt' ? 'pontos' : 'centímetros'));
     const origin = x0 + geo.mLeft;
     ctx.fillStyle = '#555';
     ctx.strokeStyle = '#777';
@@ -69,19 +71,20 @@ export class Ruler {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const mid = top + bandH / 2;
-    const step = cmPx >= 30 ? 0.25 : cmPx >= 14 ? 0.5 : 1;
-    const labelEvery = cmPx >= 18 ? 1 : cmPx >= 9 ? 2 : 5;
-    const from = Math.floor(-geo.mLeft / cmPx) - 1;
-    const to = Math.ceil((geo.pageW - geo.mLeft) / cmPx) + 1;
-    for (let c = from; c <= to; c += step) {
-      const x = origin + c * cmPx;
+    const steps = unit === 'pt' ? [1, 6, 12, 18, 36, 72, 144, 288] : unit === 'in' ? [0.125, 0.25, 0.5, 1, 2, 4, 8] : [0.25, 0.5, 1, 2, 5, 10, 20];
+    const step = steps.find((v) => v * unitPx >= 7) || steps[steps.length - 1];
+    const labelEvery = steps.find((v) => v >= step && v * unitPx >= 30 && Math.abs(v / step - Math.round(v / step)) < 1e-6) || step * 4;
+    const from = Math.floor(-geo.mLeft / (unitPx * step)) - 1;
+    const to = Math.ceil((geo.pageW - geo.mLeft) / (unitPx * step)) + 1;
+    for (let tick = from; tick <= to; tick++) {
+      const c = tick * step;
+      const x = origin + c * unitPx;
       if (x < x0 || x > x1) continue;
-      const whole = Math.abs(c - Math.round(c)) < 1e-6;
+      const whole = Math.abs(c / labelEvery - Math.round(c / labelEvery)) < 1e-6;
       if (whole) {
-        const n = Math.abs(Math.round(c));
+        const n = Math.abs(c);
         if (n === 0) continue;
-        if (n % labelEvery === 0) ctx.fillText(String(n), x, mid + 0.5);
-        else { ctx.beginPath(); ctx.moveTo(x + 0.5, mid - 2); ctx.lineTo(x + 0.5, mid + 2); ctx.stroke(); }
+        ctx.fillText(fmtNumber(n, 2), x, mid + 0.5);
       } else if (Math.abs(c * 2 - Math.round(c * 2)) < 1e-6) {
         ctx.beginPath(); ctx.moveTo(x + 0.5, mid - 2.5); ctx.lineTo(x + 0.5, mid + 2.5); ctx.stroke();
       } else {
@@ -112,7 +115,9 @@ export class Ruler {
     if (!geo || !this.state) return;
     const p = { ...this.state };
     const startX = e.clientX;
-    const snap = (tw) => (e.altKey ? tw : Math.round(tw / (TWIP_PER_CM / 4)) * (TWIP_PER_CM / 4));
+    const unit = this.app.prefs.units;
+    const interval = unit === 'in' ? 180 : unit === 'pt' ? 120 : TWIP_PER_CM / 4;
+    const snap = (tw) => (e.altKey ? tw : Math.round(tw / interval) * interval);
     const firstTw = p.left - (p.hanging || 0) + (p.hanging ? 0 : p.firstLine || 0);
     const guide = this.app.showGuide();
     let result = null;

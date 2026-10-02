@@ -87,7 +87,7 @@ class Writer {
   // Garante uma mídia no pacote e devolve o caminho
   async ensureMedia(attrs) {
     const model = this.model;
-    if (attrs.mediaPath && model.media.has(attrs.mediaPath)) {
+    if (attrs.mediaPath && (!attrs.sourceId || attrs.sourceId === model.clipboardId) && model.media.has(attrs.mediaPath)) {
       const m = model.media.get(attrs.mediaPath);
       if (!this.zip.file(attrs.mediaPath) && m.bytes) this.zip.file(attrs.mediaPath, m.bytes);
       this.ensureDefault(extOf(attrs.mediaPath), m.type);
@@ -128,7 +128,8 @@ class Writer {
     let path;
     do { this.mediaCounter++; path = 'word/media/redator' + this.mediaCounter + '.' + ext; } while (this.zip.file(path) || model.media.has(path));
     this.zip.file(path, bytes);
-    model.media.set(path, { url: src.startsWith('blob:') ? src : URL.createObjectURL(new Blob([bytes], { type })), bytes, ext, type });
+    // A URL incorporada pertence a este modelo, mesmo quando veio de outro blob.
+    model.media.set(path, { url: URL.createObjectURL(new Blob([bytes], { type })), bytes, ext, type });
     if (!model.srcMedia) model.srcMedia = new Map();
     model.srcMedia.set(src, path);
     this.ensureDefault(ext, type);
@@ -195,7 +196,7 @@ function fixDocPr(xml, ctx) {
 
 async function drawingXml(node, ctx) {
   const a = node.attrs;
-  let xml = a.xml;
+  let xml = !a.sourceId || a.sourceId === ctx.w.model.clipboardId ? a.xml : null;
   const resized = xml && (a.cx !== a.ocx || a.cy !== a.ocy);
   if (xml) {
     if (a.kind === 'image' && a.mediaPath) {
@@ -502,7 +503,8 @@ export async function writeDocx(model, doc, opts = {}) {
       const rels = new Rels(entry.rels || new Map(), entry.path);
       const hctx = new WCtx(writer, entry.path, rels);
       const tag = kind === 'header' ? 'w:hdr' : 'w:ftr';
-      let body = await blocksXml(entry.doc.content, hctx);
+      const entryDoc = entry.doc;
+      let body = await blocksXml(entryDoc.content, hctx);
       if (!body.trim()) body = '<w:p/>';
       zip.file(entry.path, XML_HEAD + '<' + tag + (entry.rootAttrs || ' ' + NS_DECL) + '>' + body + '</' + tag + '>');
       if (rels.dirty || entry.isNew) zip.file(relsPathFor(entry.path), rels.toXml());
@@ -513,7 +515,7 @@ export async function writeDocx(model, doc, opts = {}) {
         entry.isNew = false;
       }
       entry.rels = rels.map;
-      entry.dirty = false;
+      if (entry.doc === entryDoc) entry.dirty = false;
     }
   }
 

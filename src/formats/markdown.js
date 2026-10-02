@@ -648,7 +648,7 @@ export function writeMarkdown(doc, model, opts = {}) {
   const prev = R.model;
   R.model = model;
   try {
-    const w = new MdWriter(model, opts);
+    const w = new MdWriter(model, opts, doc);
     const src = model.extra.md;
     let text = src && src.bound && !opts.fresh ? w.preserving(doc, src) : w.fresh(doc);
     const eol = (model.extra.text && model.extra.text.eol) || '\n';
@@ -681,15 +681,36 @@ function inQuoteNode(styles, n) {
 }
 
 class MdWriter {
-  constructor(model, opts) {
+  constructor(model, opts, doc) {
     this.model = model;
     this.styles = model.styles;
     this.opts = opts;
     this.files = [];
     this.imgCount = 0;
+    this.imageBase = opts.baseDir ? fileUrl(opts.baseDir.replace(/[\\/]$/, '') + '/') : 'file:///Redator/';
+    this.reservedImages = new Set();
+    const reserve = (node) => {
+      if (node.type !== nodes.drawing) return;
+      for (const ref of [node.attrs.name?.startsWith('md:') ? node.attrs.name.slice(3) : null, node.attrs.src]) {
+        const key = this.imageKey(ref);
+        if (key) this.reservedImages.add(key);
+      }
+    };
+    doc.descendants(reserve);
+    // Blocos intactos são copiados do texto original sem passar por image().
+    // Também reserva seus anexos quando a imagem foi removida nesta edição.
+    for (const chunk of model.extra.md?.chunks || []) for (const node of chunk.nodes) { reserve(node); node.descendants(reserve); }
     this.counter = new NumberingCounter(model.numbering);
     this.lists = (model.extra.md && model.extra.md.lists) || new Map();
     this.cols = [];
+  }
+
+  imageKey(ref) {
+    if (!ref || /^(?:data:|blob:|https?:|!?\[\[)/i.test(ref)) return null;
+    try {
+      const url = new URL(/^[a-z]:[\\/]/i.test(ref) ? fileUrl(ref) : ref.replace(/\\/g, '/'), this.imageBase);
+      return url.protocol === 'file:' ? decodeURIComponent(url.pathname).toLowerCase() : null;
+    } catch { return null; }
   }
 
   fresh(doc) {
@@ -1142,9 +1163,11 @@ class MdWriter {
       if (mm) { ext = mm[1] === 'jpeg' ? 'jpg' : mm[1]; const bin = atob(mm[2]); bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i); }
     }
     if (!bytes) return alt ? '[' + alt + ']' : '';
-    this.imgCount++;
     const folder = (this.opts.baseName || 'documento') + '_arquivos';
-    const file = folder + '/imagem' + this.imgCount + '.' + ext;
+    let file;
+    do { file = folder + '/imagem' + (++this.imgCount) + '.' + ext; }
+    while (this.reservedImages.has(this.imageKey(file)));
+    this.reservedImages.add(this.imageKey(file));
     this.files.push({ path: file, data: bytes });
     return '![' + alt + '](' + encodeURI(file) + ')';
   }

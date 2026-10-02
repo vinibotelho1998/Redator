@@ -451,3 +451,78 @@ textarea.inp { height: auto; padding: 4px 6px; resize: vertical; width: 100%; }
 .msg-icon.error { background: #d13438 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Cpath d='M11 11l10 10M21 11L11 21' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E") center no-repeat; }
 
 .styles-menu { max-height: 70vh; overflow-y: auto; }
+
+/* Shared interaction states and layouts that remain usable in narrow windows. */
+:root { --surface: #fff; --control-radius: 4px; --focus-ring: 2px solid var(--focus); }
+:where(button, [tabindex], input, select, textarea):focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
+.titlebar :focus-visible { outline-color: #fff; }
+.ribbon { height: 110px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.rb-tab-body { flex: 0 0 auto; padding-bottom: 2px; }
+.tabs { height: 38px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.tab { flex: none; }
+.rb-launcher { width: 20px; height: 18px; }
+.rb-launcher::before { left: 5px; top: 5px; }
+.rb-launcher::after { left: 6px; top: 9px; }
+.rb-combo-arrow, .sg-btn { min-width: 22px; }
+.rb-small.split .rb-split-arrow { min-width: 20px; justify-content: center; }
+.menu-item { border: none; background: transparent; text-align: left; font: inherit; color: inherit; min-height: 32px; flex: none; }
+.menu-item:focus-visible, .font-item:focus-visible, .cp-row-btn:focus-visible { background: var(--brand-light); }
+.menu-item[aria-checked="true"] .mi-label { font-weight: 600; }
+.menu-item.disabled { color: var(--muted); }
+.cp-row-btn { min-height: 30px; }
+.cp-cell { min-width: 20px; min-height: 20px; }
+.cp-row { gap: 3px; }
+.tp-grid { grid-template-columns: repeat(10, 20px); }
+.tp-cell { width: 20px; height: 20px; padding: 0; }
+.nav-item, .nav-result { display: block; width: 100%; text-align: left; background: transparent; border-top: 0; border-right: 0; border-bottom: 0; }
+.nav-result { border-left: 0; border-bottom: 1px solid var(--line); }
+.bs-rn { text-align: left; border: 0; padding: 0; background: transparent; }
+.bs-recent-row:focus-within { background: var(--brand-light); }
+.bs-recent-row:focus-within .bs-rx { opacity: 1; }
+.bs-content, .bs-open-right { min-width: 0; }
+.statusbar { height: auto; min-height: 24px; flex-wrap: wrap; }
+.sb-left { flex: 1 1 280px; min-width: 0; min-height: 24px; }
+.sb-right { margin-left: auto; min-height: 24px; }
+.sb-info { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.dlg-body { max-width: calc(94vw - 2px); }
+.dlg-footer { flex-wrap: wrap; }
+.dlg-tabs { overflow-x: auto; flex: none; }
+.dlg-tab { flex: none; }
+.dlg-title { flex: none; }
+.dlg-list-item:focus-visible { background: var(--brand-light); }
+@media (max-width: 900px) {
+  .titlebar { padding-right: 138px; }
+  .tb-left { min-width: 140px; }
+  .tb-center { gap: 8px; }
+  .tb-search-wrap { width: 150px; flex: none; }
+  .tb-user { display: none; }
+  .bs-nav { width: 150px; }
+  .bs-item { padding: 0 14px; }
+  .bs-content { padding: 22px; }
+  .bs-open, .bs-print { flex-direction: column; gap: 18px; }
+  .bs-open-left, .bs-open-right, .bs-print-left { width: 100%; }
+  .bs-recent-head, .bs-recent-row { grid-template-columns: 24px minmax(0, 1fr) 88px 28px; }
+  .navpane { width: min(280px, 38vw); }
+}
+@media (max-width: 650px) {
+  .tb-search-wrap { display: none; }
+  .tb-title-state { display: none; }
+  .tb-center { justify-content: flex-start; }
+  .bs-content { padding: 16px; }
+  .bs-title { font-size: 28px; }
+  .bs-recent-head, .bs-recent-row { grid-template-columns: 24px minmax(0, 1fr) 28px; }
+  .bs-rdate, .bs-recent-head span:last-child { display: none; }
+  .bs-tiles { gap: 8px; }
+  .bs-thumb { width: 112px; height: 145px; }
+  .dlg { min-width: 0; max-width: 94vw; }
+  .dlg-body { padding-left: 12px; padding-right: 12px; }
+  .row3 { gap: 8px; flex-wrap: wrap; }
+  .row3 > * { flex-basis: 140px; }
+  .grid2 { column-gap: 10px; }
+}
+@media (forced-colors: active) {
+  :root { --focus: Highlight; --brand-light: Canvas; --muted: CanvasText; }
+  .tab.active, .rb-small.active, .rb-big.active, .sb-view.active, .style-tile.active { outline: 2px solid Highlight; outline-offset: -2px; }
+  .cp-cell, .cp-swatch, .rb-colorbar { forced-color-adjust: none; }
+  .popup, .dlg { border-color: CanvasText; }
+}

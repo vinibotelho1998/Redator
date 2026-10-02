@@ -8,7 +8,7 @@ import { BULLET_LIBRARY, NUMBER_LIBRARY } from '../docx/numbering.js';
 import { PAPER_SIZES, MARGIN_PRESETS } from '../model.js';
 import { pClass, cClass, tClass } from '../editor/render.js';
 import { fmtNumber, twipToCm, cmToTwip } from '../util/units.js';
-import { spinner } from './dialogs.js';
+import { spinner, formatMeasure } from './dialogs.js';
 
 const SYMBOLS = ['€', '£', '¥', '©', '®', '™', '±', '≠', '≤', '≥', '÷', '×', '∞', 'µ', 'α', 'β', 'π', 'Ω', '∑', '√', '°', '§', '¶', '•', '…', '–', '—', '“', '”', '«', '»', '←', '→', '↑', '↓', '✓', '✗', '★', '☐', '☑', '½', '¼', '¾', 'º', 'ª'];
 
@@ -32,6 +32,20 @@ export class Ribbon {
     return el;
   }
 
+  menuKeys(btn, run, opts) {
+    if (opts.toggle) btn.setAttribute('aria-pressed', 'false');
+    if (!opts.menu) return;
+    btn.setAttribute('aria-haspopup', 'menu');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); this.openMenuFor(btn, opts.menu, true); }
+    });
+    // Keyboard activation targets the button itself, rather than its split spans.
+    if (opts.split) btn.addEventListener('click', (e) => {
+      if (e.target === btn) { if (run) run(); else this.openMenuFor(btn, opts.menu, true); }
+    });
+  }
+
   big(id, label, ic, run, opts = {}) {
     const btn = h('button', { class: 'rb-big' + (opts.menu ? ' has-menu' : '') + (opts.split ? ' split' : ''), type: 'button' });
     const top = h('span', { class: 'rb-big-icon', html: icon(ic) });
@@ -47,6 +61,7 @@ export class Ribbon {
       btn.addEventListener('click', () => { if (opts.menu) this.openMenuFor(btn, opts.menu); else if (run) run(); });
     }
     btn.addEventListener('mousedown', (e) => e.preventDefault());
+    this.menuKeys(btn, run, opts);
     tooltip(btn, opts.tip || label, opts.shortcut, opts.desc);
     return this.reg(id, btn, { toggle: opts.toggle });
   }
@@ -72,14 +87,15 @@ export class Ribbon {
       btn.addEventListener('click', () => { if (opts.menu) this.openMenuFor(btn, opts.menu); else if (run) run(); });
     }
     btn.addEventListener('mousedown', (e) => e.preventDefault());
+    this.menuKeys(btn, run, opts);
     tooltip(btn, opts.tip || opts.label || '', opts.shortcut, opts.desc);
     return this.reg(id, btn, { toggle: opts.toggle });
   }
 
-  openMenuFor(btn, menu) {
+  openMenuFor(btn, menu, keyboard = false) {
     const m = typeof menu === 'function' ? menu() : menu;
-    if (m instanceof Node) openPanel(btn, m);
-    else openMenu(btn, m);
+    if (m instanceof Node) openPanel(btn, m, { keyboard });
+    else openMenu(btn, m, { keyboard });
   }
 
   group(label, content, launcher) {
@@ -107,7 +123,7 @@ export class Ribbon {
   fontCombo() {
     const app = this.app;
     const input = h('input', { class: 'rb-combo-input font', type: 'text', spellcheck: 'false', 'aria-label': 'Fonte' });
-    const arrow = h('button', { class: 'rb-combo-arrow', type: 'button', tabindex: '-1', html: icon('chevronDown') });
+    const arrow = h('button', { class: 'rb-combo-arrow', type: 'button', 'aria-label': 'Escolher fonte', 'aria-haspopup': 'menu', html: icon('chevronDown') });
     const box = h('div', { class: 'rb-combo font-combo' }, input, arrow);
     const apply = () => { const v = input.value.trim(); if (v) app.cmd('setFont', v); app.focusEditor(); };
     input.addEventListener('keydown', (e) => {
@@ -115,9 +131,10 @@ export class Ribbon {
       if (e.key === 'Escape') { e.preventDefault(); app.focusEditor(); }
     });
     input.addEventListener('focus', () => input.select());
-    const openList = () => openPanel(box, this.fontList(input.value, (f) => { input.value = f; apply(); }), { className: 'font-popup' });
+    const openList = (keyboard = false) => openPanel(arrow, this.fontList(input.value, (f) => { input.value = f; apply(); }), { className: 'font-popup', keyboard, returnFocus: input });
     arrow.addEventListener('mousedown', (e) => e.preventDefault());
-    arrow.addEventListener('click', openList);
+    arrow.addEventListener('click', (e) => openList(e.detail === 0));
+    input.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown') { e.preventDefault(); openList(true); } });
     input.addEventListener('input', () => {
       const q = input.value.toLowerCase();
       const all = app.fontList();
@@ -157,7 +174,7 @@ export class Ribbon {
   sizeCombo() {
     const app = this.app;
     const input = h('input', { class: 'rb-combo-input size', type: 'text', spellcheck: 'false', 'aria-label': 'Tamanho da Fonte' });
-    const arrow = h('button', { class: 'rb-combo-arrow', type: 'button', tabindex: '-1', html: icon('chevronDown') });
+    const arrow = h('button', { class: 'rb-combo-arrow', type: 'button', 'aria-label': 'Escolher tamanho da fonte', 'aria-haspopup': 'menu', html: icon('chevronDown') });
     const box = h('div', { class: 'rb-combo size-combo' }, input, arrow);
     const apply = () => {
       const v = parseFloat(input.value.replace(',', '.'));
@@ -170,13 +187,15 @@ export class Ribbon {
     });
     input.addEventListener('focus', () => input.select());
     arrow.addEventListener('mousedown', (e) => e.preventDefault());
-    arrow.addEventListener('click', () => {
+    const openList = (keyboard = false) => {
       const list = h('div', { class: 'size-list' });
       for (const s of [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72]) {
         list.appendChild(h('div', { class: 'font-item' + (String(s) === input.value ? ' sel' : ''), text: String(s), onclick: () => { closeAllPopups(); input.value = String(s); apply(); } }));
       }
-      openPanel(box, list, { className: 'size-popup' });
-    });
+      openPanel(arrow, list, { className: 'size-popup', keyboard, returnFocus: input });
+    };
+    arrow.addEventListener('click', (e) => openList(e.detail === 0));
+    input.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown') { e.preventDefault(); openList(true); } });
     tooltip(box, 'Tamanho da Fonte', 'Ctrl+Shift+P', 'Altere o tamanho do texto.');
     return this.reg('size', box, { input });
   }
@@ -268,7 +287,7 @@ export class Ribbon {
     const label = h('div', { class: 'tp-label', text: 'Inserir Tabela' });
     const grid = h('div', { class: 'tp-grid' });
     for (let r = 0; r < 8; r++) for (let c = 0; c < 10; c++) {
-      const cell = h('div', { class: 'tp-cell' });
+      const cell = h('button', { class: 'tp-cell', type: 'button', 'aria-label': 'Inserir tabela com ' + (c + 1) + ' colunas e ' + (r + 1) + ' linhas' });
       cell.addEventListener('mouseenter', () => {
         for (const x of cells) x.el.classList.toggle('on', x.r <= r && x.c <= c);
         label.textContent = 'Tabela ' + (c + 1) + 'x' + (r + 1);
@@ -669,7 +688,7 @@ export class Ribbon {
 
   marginsMenu() {
     const app = this.app;
-    const cm = (tw) => fmtNumber(twipToCm(tw), 2) + ' cm';
+    const cm = (tw) => formatMeasure(twipToCm(tw));
     const items = MARGIN_PRESETS.map((p) => ({
       element: h('div', { class: 'menu-item margin-item' + (this.state && this.state.marginPreset === p.id ? ' checked' : ''), onclick: () => { closeAllPopups(); app.setMargins(p); } },
         h('span', { class: 'mi-icon big', html: icon('margins') }),
@@ -721,7 +740,7 @@ export class Ribbon {
   }
 
   addTab(id, label, builder, opts = {}) {
-    const btn = h('button', { class: 'tab' + (opts.file ? ' file' : '') + (opts.contextual ? ' contextual' : ''), type: 'button', role: 'tab', text: label });
+    const btn = h('button', { class: 'tab' + (opts.file ? ' file' : '') + (opts.contextual ? ' contextual' : ''), type: 'button', role: opts.file ? null : 'tab', id: 'ribbon-tab-' + id, 'aria-controls': opts.file ? null : 'ribbon-panel-' + id, 'aria-selected': opts.file ? null : 'false', text: label });
     btn.addEventListener('mousedown', (e) => e.preventDefault());
     btn.addEventListener('click', () => {
       if (opts.file) { this.app.openBackstage(); return; }
@@ -729,6 +748,14 @@ export class Ribbon {
       this.select(id);
     });
     btn.addEventListener('dblclick', () => { if (!opts.file) this.toggleCollapse(); });
+    btn.addEventListener('keydown', (e) => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+      e.preventDefault();
+      const visible = this.tabs.filter((t) => t.builder && !t.btn.hidden);
+      const at = visible.findIndex((t) => t.btn === btn);
+      const next = e.key === 'Home' ? 0 : e.key === 'End' ? visible.length - 1 : (at + (e.key === 'ArrowLeft' ? -1 : 1) + visible.length) % visible.length;
+      visible[next].btn.click(); visible[next].btn.focus();
+    });
     if (opts.contextual) btn.hidden = true;
     this.tabsEl.appendChild(btn);
     const tab = { id, label, btn, builder, body: null, contextual: !!opts.contextual };
@@ -740,9 +767,12 @@ export class Ribbon {
     const tab = this.tabs.find((t) => t.id === id);
     if (!tab || !tab.builder) return;
     this.active = id;
-    for (const t of this.tabs) t.btn.classList.toggle('active', t.id === id);
+    for (const t of this.tabs) {
+      t.btn.classList.toggle('active', t.id === id);
+      if (t.builder) { t.btn.setAttribute('aria-selected', String(t.id === id)); t.btn.tabIndex = t.id === id ? 0 : -1; }
+    }
     if (!tab.body) {
-      tab.body = h('div', { class: 'rb-tab-body' }, ...tab.builder());
+      tab.body = h('div', { class: 'rb-tab-body', role: 'tabpanel', id: 'ribbon-panel-' + id, 'aria-labelledby': tab.btn.id }, ...tab.builder());
       this.bodyEl.appendChild(tab.body);
     }
     for (const t of this.tabs) if (t.body) t.body.hidden = t.id !== id;
@@ -780,7 +810,7 @@ export class Ribbon {
 
   update(st) {
     this.state = st;
-    const on = (id, v) => { const c = this.controls.get(id); if (c) c.el.classList.toggle('active', !!v); };
+    const on = (id, v) => { const c = this.controls.get(id); if (c) { c.el.classList.toggle('active', !!v); c.el.setAttribute('aria-pressed', String(!!v)); } };
     const dis = (id, v) => { const c = this.controls.get(id); if (c) { c.el.classList.toggle('disabled', !!v); c.el.disabled = !!v; } };
     on('b', st.bold); on('i', st.italic); on('u', st.underline); on('strike', st.strike);
     on('sub', st.sub); on('sup', st.sup);

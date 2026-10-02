@@ -30,6 +30,81 @@ const at = (el, ns, name) => (el && el.getAttributeNS(O[ns], name)) || null;
 const kids = (el) => (el ? Array.from(el.children) : []);
 const is = (el, ns, name) => el && el.namespaceURI === O[ns] && el.localName === name;
 
+// Uma abertura sem edição conserva o pacote completo, inclusive partes que o
+// editor ainda não interpreta. Mudanças no conteúdo ou nos recursos invalidam
+// essa cópia; nesse caso os diagnósticos explicam as limitações antes de salvar.
+function documentSnapshot(doc) {
+  const json = doc.toJSON();
+  if (json.attrs) {
+    json.attrs = { ...json.attrs };
+    delete json.attrs.pageProperties; // atributo de histórico, espelhado no modelo
+    if (!Object.keys(json.attrs).length) delete json.attrs;
+  }
+  return json;
+}
+
+function resourceSnapshot(model) {
+  const { dirty: _dirty, ...settings } = model.settings;
+  const entries = (map) => [...map].map(([id, entry]) => [id, {
+    doc: entry.doc ? documentSnapshot(entry.doc) : null,
+    xml: entry.xml || null, type: entry.type || null,
+    author: entry.author || null, date: entry.date || null,
+  }]);
+  return JSON.stringify({
+    section: model.section.toXml(), settings,
+    properties: model.properties, theme: model.theme,
+    styles: model.styles.toXml(), numbering: model.numbering.toXml(),
+    headers: entries(model.headers), footers: entries(model.footers),
+    footnotes: entries(model.footnotes), endnotes: entries(model.endnotes),
+    comments: entries(model.comments),
+    media: [...model.media].map(([path, media]) => [path, media.ext, media.type]),
+  });
+}
+
+export function bindOdtSource(model, doc) {
+  const source = model.extra && model.extra.odt;
+  if (!source) return;
+  source.document = JSON.stringify(documentSnapshot(doc));
+  source.resources = resourceSnapshot(model);
+  source.media = new Map([...model.media].map(([path, media]) => [path, media.bytes && media.bytes.slice()]));
+}
+
+export function canPreserveOdtSource(model, doc, opts = {}) {
+  const source = model.extra && model.extra.odt;
+  if (!source || !source.bytes || source.flat || source.template !== !!opts.template) return false;
+  if (source.document !== JSON.stringify(documentSnapshot(doc)) || source.resources !== resourceSnapshot(model)) return false;
+  for (const [path, bytes] of source.media) {
+    const current = model.media.get(path)?.bytes;
+    if (!!bytes !== !!current || (bytes && (bytes.length !== current.length || bytes.some((v, i) => v !== current[i])))) return false;
+  }
+  return true;
+}
+
+function odtDiagnostics(content, stylesDoc, meta, S, zip) {
+  const out = [];
+  const add = (code, message) => out.push({ code, message });
+  const docs = [content, stylesDoc].filter(Boolean);
+  const has = (ns, names) => docs.some((doc) => names.some((name) => doc.getElementsByTagNameNS(O[ns], name).length));
+  if (S.masters.size > 1) add('page-masters', 'O documento contém vários estilos de página; a edição preserva apenas o primeiro layout, cabeçalho e rodapé importados.');
+  if (has('style', ['header-left', 'header-first', 'footer-left', 'footer-first'])) add('page-variants', 'Cabeçalhos e rodapés diferentes na primeira página ou nas páginas pares não são preservados.');
+  if (has('office', ['annotation'])) add('comments', 'Comentários do documento original não foram importados e serão removidos na gravação.');
+  if (has('draw', ['object', 'object-ole', 'applet', 'plugin', 'custom-shape', 'rect', 'ellipse', 'line', 'polygon', 'polyline', 'path', 'g', 'connector'])) add('objects', 'Objetos incorporados, gráficos ou formas do documento original não são preservados.');
+  if (docs.some((doc) => [...doc.getElementsByTagNameNS(O.draw, 'frame')].some((el) => !kids(el).some((c) => is(c, 'draw', 'image') || is(c, 'draw', 'text-box'))))) {
+    if (!out.some((d) => d.code === 'objects')) add('objects', 'Objetos do documento original não puderam ser importados e serão removidos na gravação.');
+  }
+  if (docs.some((doc) => [...doc.getElementsByTagNameNS(O.draw, 'image')].some((el) => !zip.file((at(el, 'xlink', 'href') || '').replace(/^\.\//, ''))))) add('images', 'Há imagens externas ou ausentes no pacote que não puderam ser importadas.');
+  if (docs.some((doc) => [...doc.getElementsByTagNameNS(O.draw, 'frame')].some((el) => { const anchor = at(el, 'text', 'anchor-type'); return anchor && anchor !== 'as-char'; }))) add('image-position', 'Imagens e caixas flutuantes são convertidas em objetos alinhados ao texto.');
+  if (has('text', ['tracked-changes', 'change', 'change-start', 'change-end'])) add('changes', 'O histórico de alterações controladas do documento original não é preservado.');
+  if (has('text', ['bookmark', 'bookmark-start', 'bookmark-end', 'reference-mark', 'reference-mark-start'])) add('bookmarks', 'Marcadores e destinos de referências internas do documento original não são preservados.');
+  if (meta) {
+    const container = meta.getElementsByTagNameNS(O.office, 'meta')[0];
+    const kept = (el) => is(el, 'dc', 'title') || is(el, 'dc', 'creator') || is(el, 'meta', 'initial-creator') || is(el, 'meta', 'generator') || is(el, 'dc', 'date');
+    if (kids(container).some((el) => !kept(el))) add('metadata', 'Metadados adicionais, como propriedades personalizadas, descrição e histórico de edição, não são preservados.');
+  }
+  if (Object.keys(zip.files).some((path) => /^META-INF\/(?:documentsignatures|macrosignatures)\.xml$/i.test(path))) add('signatures', 'Assinaturas digitais do documento original serão removidas após a edição.');
+  return out;
+}
+
 // comprimento ODF para twips
 function lenTw(v) {
   if (v == null) return null;
@@ -507,12 +582,15 @@ async function flatToZip(bytes) {
 export async function readOdt(bytes) {
   // começa com "<": é o formato plano
   const start = bytes[0] === 0xEF ? 3 : 0;
-  if (bytes[start] === 0x3C) bytes = await flatToZip(bytes);
+  const flat = bytes[start] === 0x3C;
+  const original = bytes.slice();
+  if (flat) bytes = await flatToZip(bytes);
   const zip = await JSZip.loadAsync(bytes);
   const contentFile = zip.file('content.xml');
   if (!contentFile) throw new Error('O arquivo não parece ser um documento OpenDocument.');
   const content = parseXml(await contentFile.async('string'));
   const stylesDoc = zip.file('styles.xml') ? parseXml(await zip.file('styles.xml').async('string')) : null;
+  const meta = zip.file('meta.xml') ? parseXml(await zip.file('meta.xml').async('string')) : null;
   const { model } = await blankModel();
   model.format = 'odt';
   const S = new OdfStyles(content, stylesDoc);
@@ -560,7 +638,6 @@ export async function readOdt(bytes) {
         model.section.setReference(kind, 'default', entry.rId);
       }
     }
-    const meta = zip.file('meta.xml') ? parseXml(await zip.file('meta.xml').async('string')) : null;
     if (meta) {
       const t = meta.getElementsByTagNameNS(O.dc, 'title')[0];
       const c = meta.getElementsByTagNameNS(O.meta, 'initial-creator')[0] || meta.getElementsByTagNameNS(O.dc, 'creator')[0];
@@ -568,7 +645,16 @@ export async function readOdt(bytes) {
       if (c) model.properties.author = c.textContent;
     }
     const doc = finalizeDoc(schema.node('doc', null, blocks.length ? blocks : [nodes.paragraph.create()]), model);
+    const mime = zip.file('mimetype') ? (await zip.file('mimetype').async('string')).trim() : '';
+    model.extra.odt = {
+      bytes: original, flat, template: mime === 'application/vnd.oasis.opendocument.text-template',
+      diagnostics: odtDiagnostics(content, stylesDoc, meta, S, zip),
+    };
+    bindOdtSource(model, doc);
     return { model, doc };
+  } catch (err) {
+    model.dispose();
+    throw err;
   } finally {
     R.model = prev;
   }
@@ -897,6 +983,7 @@ class OdtWriter {
 }
 
 export async function writeOdt(doc, model, opts = {}) {
+  if (canPreserveOdtSource(model, doc, opts)) return model.extra.odt.bytes.slice();
   const prev = R.model;
   R.model = model;
   try {
@@ -927,7 +1014,9 @@ export async function writeOdt(doc, model, opts = {}) {
       + '<office:master-styles><style:master-page style:name="Standard" style:page-layout-name="pm1">' + hdrXml + ftrXml + '</style:master-page></office:master-styles></office:document-styles>';
     const now = new Date().toISOString().replace(/\.\d+Z$/, '');
     const meta = '<?xml version="1.0" encoding="UTF-8"?>\n<office:document-meta ' + ns + '><office:meta><meta:generator>Redator</meta:generator>'
-      + (model.properties.title ? '<dc:title>' + esc(model.properties.title) + '</dc:title>' : '') + '<dc:date>' + now + '</dc:date></office:meta></office:document-meta>';
+      + (model.properties.title ? '<dc:title>' + esc(model.properties.title) + '</dc:title>' : '')
+      + (model.properties.author ? '<meta:initial-creator>' + esc(model.properties.author) + '</meta:initial-creator><dc:creator>' + esc(model.properties.author) + '</dc:creator>' : '')
+      + '<dc:date>' + now + '</dc:date></office:meta></office:document-meta>';
     const zip = new JSZip();
     // modelo (.ott) grava com o tipo de modelo, para continuar abrindo como modelo
     const mime = opts.template ? 'application/vnd.oasis.opendocument.text-template' : 'application/vnd.oasis.opendocument.text';

@@ -19,6 +19,7 @@ import { DrawingView, TabView, TableView, OpaqueView, mediaSrc } from './nodevie
 import { renderBlocksJSON } from './static.js';
 import { normalizeExternalHTML } from './htmlparse.js';
 import { linkRangeAt } from './commands.js';
+import { CLIPBOARD_DATA, clipboardResources, importClipboardResources } from './clipboard.js';
 
 // ---------------------------------------------------------------- área de transferência
 
@@ -52,11 +53,13 @@ export function clipboardSerializer() {
     let src = mediaSrc(a);
     if (a.mediaPath && R.model) {
       const m = R.model.media.get(a.mediaPath);
-      if (m && m.bytes && m.bytes.length < 8 * 1024 * 1024 && !String(m.type).includes('emf') && !String(m.type).includes('wmf')) src = 'data:' + m.type + ';base64,' + bytesToBase64(m.bytes);
+      // A cópia deve continuar válida depois que a origem for fechada. Até imagens
+      // grandes levam os próprios bytes; URLs blob pertencem ao documento aberto.
+      if (m && m.bytes) src = 'data:' + m.type + ';base64,' + bytesToBase64(m.bytes);
     }
     const w = (a.cx || 0) / 9525, h = (a.cy || 0) / 9525;
     const { src: _s, ...rest } = a;
-    return ['img', { src, width: Math.round(w), height: Math.round(h), alt: a.alt || '', 'data-da': JSON.stringify(rest) }];
+    return ['img', { src, width: Math.round(w), height: Math.round(h), alt: a.alt || '', 'data-da': JSON.stringify({ ...rest, sourceId: R.model && R.model.clipboardId }) }];
   };
   for (const [name, fn] of Object.entries(base.marks)) {
     marks[name] = (mark, inline) => {
@@ -69,12 +72,33 @@ export function clipboardSerializer() {
     };
   }
   clipSer = new DOMSerializer(nodes, marks);
+  let depth = 0;
+  clipSer.serializeFragment = function (fragment, options = {}, target) {
+    depth++;
+    try {
+      const dom = DOMSerializer.prototype.serializeFragment.call(this, fragment, options, target);
+      if (depth === 1 && R.model && dom.firstChild) {
+        let marker = dom.firstElementChild;
+        if (!marker) {
+          marker = (options.document || document).createElement('span');
+          while (dom.firstChild) marker.appendChild(dom.firstChild);
+          dom.appendChild(marker);
+        }
+        marker.setAttribute(CLIPBOARD_DATA, JSON.stringify(clipboardResources(R.model)));
+      }
+      return dom;
+    } finally { depth--; }
+  };
   return clipSer;
 }
 
-function transformPastedHTML(html) {
-  if (html.includes('data-pm-slice')) return html;
+export function transformPastedHTML(html, view) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
+  if (R.model && importClipboardResources(doc.body, R.model)) {
+    const app = view && view.redator;
+    if (app && app.refreshStyles) app.refreshStyles();
+  }
+  if (html.includes('data-pm-slice')) return doc.body.innerHTML;
   const styles = R.model && R.model.styles;
   const code = styles && (styles.findByName('Code') || styles.findByName('HTML Preformatted'));
   const quote = styles && (styles.findByName('Quote') || styles.findByName('Block Text'));

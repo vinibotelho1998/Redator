@@ -54,21 +54,38 @@ export class Backstage {
       item('info', 'Informações'), item('save', 'Salvar'), item('saveas', 'Salvar como'), item('print', 'Imprimir'), item('export', 'Exportar'), item('close', 'Fechar'),
       h('div', { class: 'bs-spacer' }),
       item('options', 'Opções'));
-    this.onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); this.close(); } };
+    this.onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); this.close(); }
+      if (e.key === 'Tab') {
+        const items = [...this.el.querySelectorAll('button,input,select,[tabindex]')].filter((el) => !el.disabled && el.tabIndex >= 0 && el.getClientRects().length);
+        const first = items[0], last = items[items.length - 1];
+        if ((e.shiftKey && document.activeElement === first) || (!e.shiftKey && document.activeElement === last)) {
+          e.preventDefault(); (e.shiftKey ? last : first)?.focus();
+        }
+      }
+    };
   }
 
   open(section = 'home') {
+    if (!this.isOpen) {
+      this.returnFocus = document.activeElement;
+      this.background = [...this.app.root.children].filter((el) => el !== this.el).map((el) => [el, el.inert]);
+      for (const [el] of this.background) el.inert = true;
+    }
     this.el.hidden = false;
     document.addEventListener('keydown', this.onKey);
     this.app.setOverlayColor(true);
     this.show(section);
+    this.nav.querySelector('button').focus();
   }
 
   close() {
     this.el.hidden = true;
+    for (const [el, inert] of this.background || []) el.inert = inert;
     document.removeEventListener('keydown', this.onKey);
     this.app.setOverlayColor(false);
-    this.app.focusEditor();
+    if (this.returnFocus?.isConnected) this.returnFocus.focus();
+    else this.app.focusEditor();
   }
 
   get isOpen() { return !this.el.hidden; }
@@ -79,7 +96,7 @@ export class Backstage {
     if (id === 'close') { this.close(); app.closeWindow(); return; }
     if (id === 'options') { this.close(); app.dialog('options'); return; }
     this.section = id;
-    for (const b of this.nav.querySelectorAll('.bs-item')) b.classList.toggle('active', b.dataset.id === id);
+    for (const b of this.nav.querySelectorAll('.bs-item')) { b.classList.toggle('active', b.dataset.id === id); if (b.dataset.id === id) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); }
     clear(this.content);
     const title = (t) => h('h1', { class: 'bs-title', text: t });
     if (id === 'home' || id === 'new') {
@@ -92,14 +109,16 @@ export class Backstage {
       this.content.appendChild(tiles);
       if (id === 'home') {
         this.content.appendChild(h('h2', { class: 'bs-sub', text: 'Recentes' }));
-        this.content.appendChild(await this.recentList());
+        const recent = await this.recentList();
+        if (this.section === id) this.content.appendChild(recent);
       }
       return;
     }
     if (id === 'open') {
       this.content.appendChild(title('Abrir'));
       const browse = h('button', { class: 'bs-browse', type: 'button', onclick: () => { this.close(); app.openDialog(); } }, h('span', { class: 'bs-ic', html: icon('folder16') }), h('span', { text: 'Procurar' }));
-      this.content.appendChild(h('div', { class: 'bs-open' }, h('div', { class: 'bs-open-left' }, browse), h('div', { class: 'bs-open-right' }, h('h2', { class: 'bs-sub', text: 'Documentos' }), await this.recentList())));
+      const recent = await this.recentList();
+      if (this.section === id) this.content.appendChild(h('div', { class: 'bs-open' }, h('div', { class: 'bs-open-left' }, browse), h('div', { class: 'bs-open-right' }, h('h2', { class: 'bs-sub', text: 'Documentos' }), recent)));
       return;
     }
     if (id === 'info') {
@@ -165,9 +184,9 @@ export class Backstage {
     for (const r of recent) {
       const row = h('div', { class: 'bs-recent-row', title: r.path },
         h('span', { class: 'bs-ic', html: fileIcon(r.name) }),
-        h('span', { class: 'bs-rn' }, h('span', { class: 'bs-rname', text: r.name }), h('span', { class: 'bs-rpath', text: r.folder })),
+        h('button', { class: 'bs-rn', type: 'button', 'aria-label': 'Abrir ' + r.name }, h('span', { class: 'bs-rname', text: r.name }), h('span', { class: 'bs-rpath', text: r.folder })),
         h('span', { class: 'bs-rdate', text: when(r.time) }),
-        h('button', { class: 'bs-rx', type: 'button', title: 'Remover da lista', html: icon('close') }));
+        h('button', { class: 'bs-rx', type: 'button', title: 'Remover da lista', 'aria-label': 'Remover ' + r.name + ' dos recentes', html: icon('close') }));
       row.addEventListener('click', (e) => {
         if (e.target.closest('.bs-rx')) {
           e.stopPropagation();

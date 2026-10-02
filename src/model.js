@@ -127,6 +127,9 @@ export class Section {
 
 export class DocModel {
   constructor(format = 'docx') {
+    // Identidade de sessão; caminhos internos de dois pacotes DOCX podem coincidir.
+    this.clipboardId = crypto.randomUUID();
+    this.disposed = false;
     this.format = format;
     this.zip = null;
     this.mainPath = 'word/document.xml';
@@ -158,7 +161,11 @@ export class DocModel {
 
   setMediaUrl(path, url) {
     const m = this.media.get(path);
-    if (!m) return;
+    if (!m || this.disposed) {
+      if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
+      return;
+    }
+    if (m.url && m.url !== url && m.url.startsWith('blob:')) URL.revokeObjectURL(m.url);
     m.url = url;
     for (const fn of this.mediaListeners) fn(path, url);
   }
@@ -166,6 +173,16 @@ export class DocModel {
   onMedia(fn) {
     this.mediaListeners.add(fn);
     return () => this.mediaListeners.delete(fn);
+  }
+
+  // Chamar somente depois de terminar as gravações/conversões que usam o modelo.
+  // O clipboard incorpora os bytes e não mantém referências a estas URLs.
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    const urls = new Set([...this.media.values()].map((m) => m.url));
+    for (const url of urls) if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
+    this.mediaListeners.clear();
   }
 
   // Cabeçalho ou rodapé de uma página

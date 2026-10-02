@@ -40,6 +40,7 @@ const paths = await packager({
     if (!p) return false;
     const top = p.split('/')[1];
     if (keep.has(top)) return false;
+    if (top === 'services') return false;
     if (top === 'app') return false;
     if (top === 'dist') return /\.map$/.test(p);
     return true;

@@ -29,9 +29,11 @@ no mesmo lugar do Word. As páginas quebram como no Word, com cabeçalho, rodap�
 numeração "Página X de Y", notas de rodapé, sumário com pontilhado, tabelas com
 estilos prontos, listas numeradas em vários níveis e imagens redimensionáveis.
 
-**Salva sem estragar.** O `.docx` é lido e gravado em cima do pacote original: o
-que o Redator não sabe editar, como gráficos, SmartArt e campos, volta para o
-arquivo intacto. Abrir, mexer num parágrafo e salvar não bagunça o resto.
+**Preserva recursos do original.** O `.docx` é gravado em cima do pacote original,
+mantendo partes que o editor não reconstrói. Gráficos, SmartArt, revisões e campos
+têm suporte parcial; confira documentos complexos no aplicativo de origem.
+ODT e OTT salvos sem alterações mantêm os bytes originais. Após edição, o Redator
+avisa sobre recursos identificados que a conversão pode perder.
 
 **Markdown sem diff fantasma.** Salvar um `.md` sem editar não muda nenhum byte.
 Editar um parágrafo reescreve só as linhas dele, com o recuo, o marcador da lista
@@ -56,9 +58,16 @@ mandar nada para fora do PC. Salvar grava um `.docx` ao lado do PDF.
 **PDF e impressão.** Exporta PDF com as mesmas quebras de página da tela e imprime
 pela janela de impressão do Windows.
 
-**Nada se perde se o PC cair.** Enquanto há alterações não salvas, o Redator guarda
-uma cópia a cada minuto. Se o programa fechar de repente, na abertura seguinte ele
-oferece de volta tudo o que estava aberto, como a AutoRecuperação do Word.
+**Recuperação automática.** Enquanto há alterações não salvas, o Redator guarda
+periodicamente uma cópia com conteúdo e metadados no mesmo arquivo, com checksum.
+Na abertura seguinte a uma interrupção, oferece as cópias disponíveis. A edição
+feita durante um salvamento continua pendente até ser gravada. Alterações externas
+no arquivo são conferidas antes de substituir o original.
+
+**Teclado e unidades.** Menus, abas, botões divididos e diálogos aceitam navegação
+por teclado; os diálogos mantêm o foco na janela aberta. Centímetros, polegadas
+e pontos são usados nos campos e na régua conforme a preferência. Margens,
+orientação, tabulação padrão e opções de cabeçalho entram no desfazer e refazer.
 
 <table>
   <tr>
@@ -164,14 +173,37 @@ exemplo em `tests/fixtures`:
 - paginação e digitação num documento longo;
 - botões da faixa de opções e caixas de diálogo sem erro.
 
+Também cobre gravações concorrentes, falhas de disco e substituição, anexos com
+caminhos inválidos, recuperação corrompida, validação do remetente IPC,
+preferências inválidas, falhas dos auxiliares Windows, colagem entre documentos,
+notas de tabelas, histórico de página e interação real por teclado.
+
+`npm run test:unit` executa os testes de serviços e estado; `npm run test:electron`
+executa a integração. Depois de `npm run package`, `npm run test:packaged` repete
+a integração no executável distribuído. Diagnósticos ficam em `tests-results/`.
+
 ## Gerar o instalador
 
 ```
 BUILD.bat
 ```
 
-Sai em `out\Redator-Setup.exe`. O CI gera um a cada push na `main` e publica na
-release `latest`.
+Sai em `out\Redator-Setup.exe`. O CI verifica pull requests e gera um instalador
+a cada push na `main`. A publicação cria uma tag por versão, conserva as releases
+anteriores e inclui `SHA256SUMS.txt`. A versão na branch só é incrementada depois
+de o build, os testes do pacote e o instalador terem sido concluídos.
+
+## Limitações e próximos passos
+
+O layout ainda usa uma geometria de seção global. Documentos com várias seções,
+cabeçalhos diferentes entre seções, linhas de tabela maiores que uma página e
+cabeçalhos de tabela repetidos exigem evolução do modelo e da paginação. A edição
+de ODT reconstrói o arquivo; a preservação integral só se aplica ao arquivo intacto.
+
+O [plano de refinamento](docs/plano-refinamento.md) registra as mudanças entregues,
+os critérios de validação e o trabalho restante. A comparação com Word e
+LibreOffice, testes com leitor de tela e instalação em Windows limpo continuam
+necessárias para ampliar as garantias em documentos complexos.
 
 ## Como funciona
 
