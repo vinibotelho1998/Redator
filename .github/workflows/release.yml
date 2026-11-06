@@ -125,6 +125,7 @@ jobs:
 
       - name: Preparar sandbox do Chromium no runner
         run: |
+          node node_modules/electron/install.js
           sudo install -o root -g root -m 4755 node_modules/electron/dist/chrome-sandbox /usr/local/sbin/redator-chrome-sandbox
           echo "CHROME_DEVEL_SANDBOX=/usr/local/sbin/redator-chrome-sandbox" >> "$GITHUB_ENV"
 
