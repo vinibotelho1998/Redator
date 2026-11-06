@@ -120,7 +120,7 @@ jobs:
       - name: Instalar dependências gráficas e OCR
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb xauth libgtk-3-0t64 libnss3 libasound2t64 libgbm1 fontconfig tesseract-ocr tesseract-ocr-por desktop-file-utils
+          sudo apt-get install -y xvfb xauth openbox libgtk-3-0t64 libnss3 libasound2t64 libgbm1 fontconfig tesseract-ocr tesseract-ocr-por desktop-file-utils
           npm ci
 
       - name: Preparar sandbox do Chromium no runner
@@ -132,7 +132,7 @@ jobs:
       - name: Testar editor com tela virtual
         env:
           REDATOR_TEST_SHOW: "1"
-        run: xvfb-run -a -s '-screen 0 1440x1000x24' npm test
+        run: xvfb-run -a -s '-screen 0 1440x1000x24' sh -c 'openbox > /dev/null 2>&1 & exec npm test'
 
       - name: Sincronizar versão com o instalador Windows
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -147,7 +147,7 @@ jobs:
           helper=out/Redator-linux-x64/chrome-sandbox
           sudo chown root:root "$helper"
           sudo chmod 4755 "$helper"
-          xvfb-run -a -s '-screen 0 1440x1000x24' npm run test:packaged
+          xvfb-run -a -s '-screen 0 1440x1000x24' sh -c 'openbox > /dev/null 2>&1 & exec npm run test:packaged'
           sudo chmod 0755 "$helper"
           sudo chown "$(id -u):$(id -g)" "$helper"
           XDG_DATA_HOME="$RUNNER_TEMP/menu" ./instalar-menu.sh

@@ -223,6 +223,10 @@ function createWindow(filePath, opts = {}) {
     if (HIDDEN_TEST) { win.webContents.focus(); return; }
     if (b.maximized) win.maximize();
     win.show();
+    if (process.env.REDATOR_TEST) {
+      win.focus();
+      win.webContents.focus();
+    }
   });
 
   win.on('close', (e) => {
