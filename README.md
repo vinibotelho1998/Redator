@@ -138,6 +138,12 @@ A ortografia usa os dicionários do Chromium. As preferências e a recuperação
 ficam no diretório de configuração do usuário (`$XDG_CONFIG_HOME/Redator` ou
 `~/.config/Redator`).
 
+Em sistemas que restringem a criação de namespaces pelo Chromium, como algumas
+configurações do Ubuntu, a inicialização pode pedir que um administrador
+configure o auxiliar `chrome-sandbox`. Nesses casos instale a distribuição
+em uma pasta controlada por root (por exemplo `/opt/Redator`) e faça o auxiliar
+`out/Redator-linux-x64/chrome-sandbox` pertencer a `root:root` com modo `4755`.
+
 Para recompilar em Linux com Node 22.13+ e npm, rode `npm ci`, `npm run package`
 e `npm run test:packaged` numa sessão gráfica. O executável fica dentro de
 `out/Redator-linux-x64` em máquinas x86-64.

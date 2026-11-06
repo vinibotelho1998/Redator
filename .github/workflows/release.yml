@@ -126,8 +126,8 @@ jobs:
       - name: Preparar sandbox do Chromium no runner
         run: |
           node node_modules/electron/install.js
-          sudo install -o root -g root -m 4755 node_modules/electron/dist/chrome-sandbox /usr/local/sbin/redator-chrome-sandbox
-          echo "CHROME_DEVEL_SANDBOX=/usr/local/sbin/redator-chrome-sandbox" >> "$GITHUB_ENV"
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
 
       - name: Testar editor com tela virtual
         env:
@@ -144,7 +144,12 @@ jobs:
         run: |
           chmod +x Iniciar-Redator.sh instalar-menu.sh
           npm run package
+          helper=out/Redator-linux-x64/chrome-sandbox
+          sudo chown root:root "$helper"
+          sudo chmod 4755 "$helper"
           xvfb-run -a -s '-screen 0 1440x1000x24' npm run test:packaged
+          sudo chmod 0755 "$helper"
+          sudo chown "$(id -u):$(id -g)" "$helper"
           XDG_DATA_HOME="$RUNNER_TEMP/menu" ./instalar-menu.sh
           desktop-file-validate "$RUNNER_TEMP/menu/applications/br.redator.app.desktop"
 
