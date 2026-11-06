@@ -560,7 +560,12 @@ class App {
     this.nav.render();
     this.countWords();
     this.scheduleUI();
-    setTimeout(() => this.focusEditor(), 0);
+    // Outro documento ou um controle da faixa pode ganhar foco antes do timer.
+    const openedView = this.view;
+    const previousFocus = document.activeElement;
+    setTimeout(() => {
+      if (this.view === openedView && document.activeElement === previousFocus) this.focusEditor();
+    }, 0);
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.layout.invalidate());
   }
 

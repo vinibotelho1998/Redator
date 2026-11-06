@@ -1,5 +1,11 @@
 // Incluído pelo runner antes de suite.js. As ativações usam teclas nativas do Electron.
-window.runUiRegressions = async function ({ app, expect, sleep, rt }) {
+window.runUiRegressions = async function ({ app, expect: check, sleep, rt }) {
+  const expect = (name, ok) => check(name, ok, ok ? undefined : {
+    focus: document.activeElement?.id || document.activeElement?.outerHTML?.slice(0, 120),
+    documentFocused: document.hasFocus(),
+    tab: app.ribbon.active,
+    dialog: document.querySelector('.dlg-overlay')?.textContent.slice(0, 160),
+  });
   const keys = async (...events) => {
     const before = window.__keysDone || 0;
     const input = events.map((event) => {
@@ -26,8 +32,11 @@ window.runUiRegressions = async function ({ app, expect, sleep, rt }) {
 
   app.setViewMode('print');
   await app.loadBytes(bytes, window.__tmp + 'interface.txt', false);
-  await frame();
   app.ribbon.select('home');
+  tab('home').focus();
+  await sleep(20);
+  expect('UI: abrir documento preserva nova escolha de foco', document.activeElement === tab('home'));
+  await frame();
   app.setRuler(true, true);
 
   // Abas e botões compostos precisam reagir à ativação nativa de button.
