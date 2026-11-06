@@ -14,6 +14,7 @@
   <a href="https://github.com/vinibotelho1998/Redator/actions/workflows/release.yml"><img src="https://github.com/vinibotelho1998/Redator/actions/workflows/release.yml/badge.svg" alt="Build"></a>
   <img src="https://img.shields.io/badge/Electron-44-47848F?logo=electron&logoColor=white" alt="Electron 44">
   <img src="https://img.shields.io/badge/editor-ProseMirror-6f42c1" alt="ProseMirror">
+  <img src="https://img.shields.io/badge/plataforma-Linux%20x86--64-555" alt="Linux x86-64">
   <img src="https://img.shields.io/badge/plataforma-Windows%2010%2F11%20x64-0078D6?logo=windows&logoColor=white" alt="Windows 10/11 x64">
   <img src="https://img.shields.io/badge/licen%C3%A7a-MIT-2ea44f" alt="Licença MIT">
 </p>
@@ -122,7 +123,26 @@ tabelas com células mescladas, imagens, links, sumário, notas de rodapé e
 cabeçalho. PDF, EPUB, MHT, e-mail e OpenDocument plano abrem convertidos. Nos
 dois casos, salvar grava um arquivo novo ao lado e não toca no original.
 
-## Instalação
+## Linux
+
+Execute `./Iniciar-Redator.sh` nesta pasta. O pacote incluído é para Linux x86-64 e
+contém o Electron. Para abrir um arquivo, passe seu caminho como argumento. Para
+registrar no menu de aplicativos e em **Abrir com**, execute `./instalar-menu.sh`
+depois de colocar a pasta no local definitivo. O registro usa Python 3.
+
+O OCR local usa Tesseract e os dados de idioma português (`por`). O Redator usa
+Fontconfig para listar as fontes instaladas e ImageMagick para imagens TIFF.
+A leitura de WMF/EMF depende dos formatos habilitados no ImageMagick da distribuição.
+Documentos, exportação e edição funcionam sem essas ferramentas opcionais.
+A ortografia usa os dicionários do Chromium. As preferências e a recuperação
+ficam no diretório de configuração do usuário (`$XDG_CONFIG_HOME/Redator` ou
+`~/.config/Redator`).
+
+Para recompilar em Linux com Node 22.13+ e npm, rode `npm ci`, `npm run package`
+e `npm run test:packaged` numa sessão gráfica. O executável fica dentro de
+`out/Redator-linux-x64` em máquinas x86-64.
+
+## Instalação no Windows
 
 Baixe o **Redator-Setup.exe** da [última release](https://github.com/vinibotelho1998/Redator/releases/latest)
 e execute. Não pede administrador, não precisa de Node e nem do repositório.
@@ -134,7 +154,7 @@ escolha **Abrir com**, **Escolher outro aplicativo**, marque o **Redator** e
 
 ## Rodar a partir do código-fonte
 
-Precisa do Node 22 ou mais novo no Windows.
+Precisa do Node 22.13 ou mais novo em Windows ou Linux.
 
 ```
 npm install
@@ -182,7 +202,17 @@ notas de tabelas, histórico de página e interação real por teclado.
 executa a integração. Depois de `npm run package`, `npm run test:packaged` repete
 a integração no executável distribuído. Diagnósticos ficam em `tests-results/`.
 
-## Gerar o instalador
+## CI/CD
+
+O workflow em `.github/workflows/release.yml` roda em pull requests e pushes na
+`main`, em tags `v*` e por acionamento manual. O job Linux usa Ubuntu 24.04,
+Node 24, OCR em português e Xvfb para testar o editor e o binário. O job Windows
+executa a suíte e gera o instalador com Inno Setup. Os dois jobs precisam passar
+para publicar. Um push na `main` incrementa a versão patch e cria a tag. Para
+publicar uma tag explícita, use `v` seguido da versão de `package.json`. A
+release reúne o instalador Windows, o tar.gz Linux x86-64 e os checksums SHA-256.
+
+## Gerar o instalador Windows
 
 ```
 BUILD.bat

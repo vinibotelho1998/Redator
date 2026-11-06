@@ -14,7 +14,7 @@ window.runUiRegressions = async function ({ app, expect, sleep, rt }) {
     await frame();
   };
   const frame = () => new Promise((resolve) => {
-    const timer = setTimeout(resolve, 1500);
+    const timer = setTimeout(resolve, 200);
     requestAnimationFrame(() => { clearTimeout(timer); resolve(); });
   });
   const control = (id) => app.ribbon.controls.get(id).el;

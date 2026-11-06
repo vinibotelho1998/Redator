@@ -10,6 +10,7 @@ const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../src/app.js'), 'utf8');
 const between = (from, to) => source.slice(source.indexOf(from), source.indexOf(to, source.indexOf(from)));
 const methods = [
+  between('  samePath(', '  async openPath('),
   between('  markClean(', '  // ------------------------------------------------------------ AutoRecuperação'),
   between('  async saveAs(', '  async performSaveAs('),
   between('  async writeTo(', '  closeWindow()'),

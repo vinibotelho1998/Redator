@@ -84,18 +84,18 @@ export function encodeText(text, info) {
 export function dirName(path) {
   if (!path) return '';
   const i = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));
-  return i >= 0 ? path.slice(0, i) : '';
+  return i === 0 ? path[0] : i > 0 ? path.slice(0, i) : '';
 }
 
 export function fileUrl(path) {
   const p = path.replace(/\\/g, '/');
-  return 'file:///' + p.split('/').map((s, i) => (i === 0 && /^[a-z]:$/i.test(s) ? s : encodeURIComponent(s))).join('/');
+  return (p.startsWith('//') ? 'file:' : p.startsWith('/') ? 'file://' : 'file:///') + p.split('/').map((s, i) => (i === 0 && /^[a-z]:$/i.test(s) ? s : encodeURIComponent(s))).join('/');
 }
 
 export function resolveRelative(baseDir, src) {
   if (!src) return src;
   if (/^(https?:|data:|blob:|file:)/i.test(src)) return src;
-  if (/^[a-z]:[\\/]/i.test(src) || src.startsWith('\\\\')) return fileUrl(src);
+  if (/^[a-z]:[\\/]/i.test(src) || src.startsWith('/') || src.startsWith('\\\\')) return fileUrl(src);
   if (!baseDir) return src;
   let rel = src;
   try { rel = decodeURI(src); } catch { /* % solto no nome do arquivo */ }
@@ -105,7 +105,7 @@ export function resolveRelative(baseDir, src) {
     if (p === '..') out.pop();
     else if (p !== '.' && p !== '') out.push(p);
   }
-  return fileUrl(out.join('/'));
+  return fileUrl((baseDir.startsWith('/') ? '/' : '') + out.join('/'));
 }
 
 // Bytes de um canvas. toDataURL é síncrono: o toBlob espera uma folga do

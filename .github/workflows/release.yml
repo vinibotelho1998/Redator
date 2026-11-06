@@ -3,6 +3,7 @@ name: Build e Release
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -18,7 +19,7 @@ jobs:
   build:
     runs-on: windows-latest
     outputs:
-      version: ${{ steps.versao.outputs.numero }}
+      version: ${{ steps.version_info.outputs.numero }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,6 +52,15 @@ jobs:
         run: |
           $nova = (npm version patch --no-git-tag-version).Trim().TrimStart('v')
           echo "numero=$nova" >> $env:GITHUB_OUTPUT
+
+      - name: Conferir versão e tag
+        id: version_info
+        run: |
+          $versao = (Get-Content package.json | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME -ne "v$versao") {
+            throw "A tag deve corresponder à versão de package.json: v$versao."
+          }
+          "numero=$versao" >> $env:GITHUB_OUTPUT
 
       - name: Empacotar o app
         run: npm run package
@@ -97,9 +107,71 @@ jobs:
             package.json
             package-lock.json
 
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Instalar dependências gráficas e OCR
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xauth libgtk-3-0t64 libnss3 libasound2t64 libgbm1 fontconfig tesseract-ocr tesseract-ocr-por desktop-file-utils
+          npm ci
+
+      - name: Preparar sandbox do Chromium no runner
+        run: |
+          sudo install -o root -g root -m 4755 node_modules/electron/dist/chrome-sandbox /usr/local/sbin/redator-chrome-sandbox
+          echo "CHROME_DEVEL_SANDBOX=/usr/local/sbin/redator-chrome-sandbox" >> "$GITHUB_ENV"
+
+      - name: Testar editor com tela virtual
+        env:
+          REDATOR_TEST_SHOW: "1"
+        run: xvfb-run -a -s '-screen 0 1440x1000x24' npm test
+
+      - name: Sincronizar versão com o instalador Windows
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: npm version patch --no-git-tag-version
+
+      - name: Gerar e testar o pacote Linux
+        env:
+          REDATOR_TEST_SHOW: "1"
+        run: |
+          chmod +x Iniciar-Redator.sh instalar-menu.sh
+          npm run package
+          xvfb-run -a -s '-screen 0 1440x1000x24' npm run test:packaged
+          XDG_DATA_HOME="$RUNNER_TEMP/menu" ./instalar-menu.sh
+          desktop-file-validate "$RUNNER_TEMP/menu/applications/br.redator.app.desktop"
+
+      - name: Preparar distribuição Linux com permissões de execução
+        run: |
+          tar -czf "$RUNNER_TEMP/Redator-linux-x64.tar.gz" --transform='s,^,Redator/,' \
+            Iniciar-Redator.sh instalar-menu.sh app/icons/redator.png out/Redator-linux-x64 LICENSE
+          cd "$RUNNER_TEMP"
+          sha256sum Redator-linux-x64.tar.gz > Redator-linux-x64.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Redator-linux
+          path: |
+            ${{ runner.temp }}/Redator-linux-x64.tar.gz
+            ${{ runner.temp }}/Redator-linux-x64.sha256
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: diagnostico-linux
+          path: tests-results/
+          if-no-files-found: ignore
+
   publish:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: build
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: [build, linux]
     runs-on: windows-latest
     permissions:
       contents: write
@@ -113,13 +185,21 @@ jobs:
           name: Redator-installer
           path: out
 
+      - name: Recuperar pacote Linux testado
+        uses: actions/download-artifact@v4
+        with:
+          name: Redator-linux
+          path: out
+
       - name: Recuperar arquivos de versao
+        if: github.ref == 'refs/heads/main'
         uses: actions/download-artifact@v4
         with:
           name: Redator-version
           path: .
 
       - name: Registrar a versao testada
+        if: github.ref == 'refs/heads/main'
         id: commit
         run: |
           git config user.name "github-actions[bot]"
@@ -134,17 +214,18 @@ jobs:
       - name: Publicar release com historico
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ steps.commit.outputs.sha || github.sha }}
         run: |
           $tag = "v${{ needs.build.outputs.version }}"
           $notas = @"
-          Instalador gerado do commit ${{ steps.commit.outputs.sha }}, versão ${{ needs.build.outputs.version }}.
+          Pacotes para Windows e Linux x86-64 gerados do commit ${env:RELEASE_SHA}, versão ${{ needs.build.outputs.version }}.
 
-          O arquivo SHA256SUMS.txt permite conferir a integridade do instalador.
+          Extraia Redator-linux-x64.tar.gz e execute Iniciar-Redator.sh no Linux. Os dois pacotes acompanham checksums SHA-256.
           Abre e edita documentos, exporta PDF e oferece recuperação automática. Não exige Node nem o repositório.
           "@
           $notas | Set-Content out/release-notes.md -Encoding utf8
-          gh release create $tag "out/Redator-Setup.exe" "out/SHA256SUMS.txt" `
-            --target "${{ steps.commit.outputs.sha }}" `
+          gh release create $tag "out/Redator-Setup.exe" "out/SHA256SUMS.txt" "out/Redator-linux-x64.tar.gz" "out/Redator-linux-x64.sha256" `
+            --target "$env:RELEASE_SHA" `
             --title "Redator v${{ needs.build.outputs.version }}" `
             --notes-file out/release-notes.md `
             --latest

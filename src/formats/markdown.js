@@ -1149,9 +1149,12 @@ class MdWriter {
     }
     const alt = (a.alt || '').replace(/[[\]]/g, '');
     if (a.src && /^file:/.test(a.src) && this.opts.baseDir) {
-      const target = decodeURI(a.src.replace(/^file:\/\/\//, '')).replace(/\//g, '\\');
-      const base = this.opts.baseDir.replace(/\//g, '\\');
-      if (target.toLowerCase().startsWith(base.toLowerCase() + '\\')) return '![' + alt + '](' + target.slice(base.length + 1).replace(/\\/g, '/').replace(/ /g, '%20') + ')';
+      const target = new URL(a.src);
+      const base = fileUrl(this.opts.baseDir.replace(/[\\/]$/, '') + '/');
+      const windows = /^[a-z]:|^\\\\/i.test(this.opts.baseDir);
+      if ((windows ? target.href.toLowerCase().startsWith(base.toLowerCase()) : target.href.startsWith(base))) {
+        return '![' + alt + '](' + target.href.slice(base.length) + ')';
+      }
       return '![' + alt + '](' + a.src + ')';
     }
     if (a.src && /^https?:/.test(a.src)) return '![' + alt + '](' + a.src + ')';

@@ -1,4 +1,4 @@
-// Empacota o Redator como programa do Windows em out\Redator-win32-x64.
+// Empacota para a plataforma nativa em out/Redator-<plataforma>-<arquitetura>.
 // Usa o zip do Electron que já estiver no cache local; sem ele, o packager baixa.
 import { packager } from '@electron/packager';
 import fs from 'node:fs';
@@ -9,12 +9,15 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const electronVersion = JSON.parse(fs.readFileSync(path.join(root, 'node_modules', 'electron', 'package.json'), 'utf8')).version;
 
+const platform = process.platform;
+if (!['win32', 'linux'].includes(platform)) throw new Error('Empacotamento disponível em Windows e Linux.');
+const arch = platform === 'win32' ? 'x64' : process.arch;
 let zipDir = null;
-const cacheRoot = path.join(process.env.LOCALAPPDATA || '', 'electron', 'Cache');
+const cacheRoot = process.env.electron_config_cache || (platform === 'win32' ? path.join(process.env.LOCALAPPDATA || '', 'electron', 'Cache') : path.join(process.env.XDG_CACHE_HOME || path.join(process.env.HOME, '.cache'), 'electron'));
 try {
   for (const d of fs.readdirSync(cacheRoot)) {
     const full = path.join(cacheRoot, d);
-    if (fs.existsSync(path.join(full, 'electron-v' + electronVersion + '-win32-x64.zip'))) zipDir = full;
+    if (fs.existsSync(path.join(full, 'electron-v' + electronVersion + '-' + platform + '-' + arch + '.zip'))) zipDir = full;
   }
 } catch { /* sem cache local */ }
 
@@ -24,11 +27,11 @@ const paths = await packager({
   out: path.join(root, 'out'),
   name: 'Redator',
   executableName: 'Redator',
-  platform: 'win32',
-  arch: 'x64',
+  platform,
+  arch,
   electronVersion,
   ...(zipDir ? { electronZipDir: zipDir } : {}),
-  icon: path.join(root, 'app', 'icons', 'redator.ico'),
+  icon: path.join(root, 'app', 'icons', platform === 'win32' ? 'redator.ico' : 'redator.png'),
   overwrite: true,
   asar: true,
   prune: false,

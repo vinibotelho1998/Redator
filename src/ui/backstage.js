@@ -156,7 +156,7 @@ export class Backstage {
       const btn = h('button', { class: 'bs-print-btn', type: 'button', onclick: () => { this.close(); app.print(); } }, h('span', { html: icon('print') }), h('span', { text: 'Imprimir' }));
       const pdf = h('button', { class: 'bs-print-btn', type: 'button', onclick: () => { this.close(); app.exportPdf(); } }, h('span', { html: icon('pdf') }), h('span', { text: 'Salvar como PDF' }));
       const preview = h('div', { class: 'bs-preview' });
-      this.content.append(h('div', { class: 'bs-print' }, h('div', { class: 'bs-print-left' }, btn, pdf, h('p', { class: 'muted', text: 'A impressora, as cópias e o intervalo de páginas são escolhidos na janela de impressão do Windows.' })), preview));
+      this.content.append(h('div', { class: 'bs-print' }, h('div', { class: 'bs-print-left' }, btn, pdf, h('p', { class: 'muted', text: 'A impressora, as cópias e o intervalo de páginas são escolhidos na janela de impressão do sistema.' })), preview));
       app.renderPreview(preview);
       return;
     }

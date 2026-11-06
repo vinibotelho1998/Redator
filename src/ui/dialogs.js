@@ -801,8 +801,9 @@ export function optionsDialog(app) {
   // aplicativo padrão: o Windows só deixa a escolha com quem usa, nas configurações
   const defStatus = h('p', { class: 'dlg-p', text: 'Verificando...' });
   const defBtn = h('button', { class: 'btn', type: 'button', text: 'Definir como padrão...', onclick: () => app.host.openDefaultApps && app.host.openDefaultApps() });
+  const isLinux = app.host.platform === 'linux';
   const defaults = groupBox('Aplicativo padrão',
-    h('p', { class: 'dlg-p', text: 'Para abrir documentos com dois cliques no Redator, escolha-o nas configurações do Windows.' }), defStatus, defBtn);
+    h('p', { class: 'dlg-p', text: isLinux ? 'No gerenciador de arquivos, clique com o botão direito em um documento, escolha Abrir com e marque Redator como padrão.' : 'Para abrir documentos com dois cliques no Redator, escolha-o nas configurações do Windows.' }), defStatus, ...(isLinux ? [] : [defBtn]));
   if (app.host.defaultStatus) {
     app.host.defaultStatus().then((st) => {
       const mine = Object.keys(st || {}).filter((e) => st[e]);

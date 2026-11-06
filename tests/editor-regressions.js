@@ -94,8 +94,8 @@ window.runEditorRegressions = async function (app, rt, expect) {
   const markdownSaved = await host.writeFile(markdownPath, markdownExport.data, markdownExport.extras);
   expect('md: publicação dos novos anexos conclui com sucesso', markdownSaved.ok === true, markdownSaved);
   if (!markdownSaved.ok) throw new Error('Gravação dos anexos Markdown falhou: ' + JSON.stringify(markdownSaved));
-  const oldImageAfter = await host.readFile(window.__tmp + oldImagePath.replace(/\//g, '\\'));
-  const newImageAfter = await host.readFile(window.__tmp + markdownExport.extras[0].path.replace(/\//g, '\\'));
+  const oldImageAfter = await host.readFile(window.__tmp + oldImagePath);
+  const newImageAfter = await host.readFile(window.__tmp + markdownExport.extras[0].path);
   expect('md: salvar imagem nova conserva os bytes dos dois anexos', markdownSaved.ok && bytesEqual(oldImageAfter.data, oldImageBytes) && bytesEqual(newImageAfter.data, newImageBytes));
   const twice = await rt.readMarkdown(markdownExport.data, markdownPath);
   const reopenedImages = [];

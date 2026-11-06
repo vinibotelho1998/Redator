@@ -7,15 +7,18 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import electronPath from 'electron';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const packaged = process.argv.includes('--packaged');
-const executable = packaged ? path.join(root, 'out', 'Redator-win32-x64', 'Redator.exe') : electronPath;
+const windows = process.platform === 'win32';
+const executable = packaged ? path.join(root, 'out', 'Redator-' + process.platform + '-' + (windows ? 'x64' : process.arch), windows ? 'Redator.exe' : 'Redator')
+  : (process.env.ELECTRON_BIN || require('electron'));
 if (!fs.existsSync(executable)) throw new Error('Executável não encontrado: ' + executable);
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'redator-teste-'));
 const fixtures = path.join(root, 'tests', 'fixtures') + path.sep;
-const resultsDir = path.join(root, 'tests-results');
+const resultsDir = process.env.REDATOR_TEST_RESULTS || path.join(root, 'tests-results');
 fs.mkdirSync(resultsDir, { recursive: true });
 const logPath = path.join(resultsDir, packaged ? 'electron-packaged.log' : 'electron.log');
 fs.writeFileSync(logPath, '');

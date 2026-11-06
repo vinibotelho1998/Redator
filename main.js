@@ -11,6 +11,8 @@ const { createLineHelper } = require('./services/line-helper.cjs');
 const { normalizePreferences } = require('./services/preferences.cjs');
 const { encodeSnapshot, readRecovery, scanRecovery: findRecovery, recoveryFiles, RECOVER_ID } = require('./services/recovery-snapshot.cjs');
 const fileStore = createFileStore();
+const linux = require('./services/linux.cjs');
+const pathKey = (p) => process.platform === 'win32' ? p.toLowerCase() : p;
 
 const APP_NAME = 'Redator';
 const TITLE_BAR_COLOR = '#185abd';
@@ -98,7 +100,7 @@ function getRecent() {
 
 function addRecent(p) {
   if (typeof p !== 'string' || !p) return getRecent();
-  const list = getRecent().filter((r) => r.path.toLowerCase() !== p.toLowerCase());
+  const list = getRecent().filter((r) => pathKey(r.path) !== pathKey(p));
   list.unshift({ path: p, name: path.basename(p), folder: path.dirname(p), time: Date.now() });
   const trimmed = list.slice(0, 40);
   writeJson(recentFile, trimmed);
@@ -107,7 +109,7 @@ function addRecent(p) {
 }
 
 function removeRecent(p) {
-  const list = getRecent().filter((r) => r.path.toLowerCase() !== String(p).toLowerCase());
+  const list = getRecent().filter((r) => pathKey(r.path) !== pathKey(String(p)));
   writeJson(recentFile, list);
   return list;
 }
@@ -188,7 +190,7 @@ function saveWindowState(win) {
 
 function createWindow(filePath, opts = {}) {
   const b = nextBounds();
-  const iconPath = path.join(__dirname, 'app', 'icons', 'redator.ico');
+  const iconPath = path.join(__dirname, 'app', 'icons', process.platform === 'win32' ? 'redator.ico' : 'redator.png');
   const win = new BrowserWindow({
     x: b.x, y: b.y, width: b.width || 1280, height: b.height || 860,
     minWidth: 560, minHeight: 420,
@@ -298,7 +300,7 @@ function windowFor(event) {
 function openFileInNewWindow(p) {
   // se já estiver aberto, só foca
   for (const w of windows) {
-    if (!w.isDestroyed() && w.docState.filePath && w.docState.filePath.toLowerCase() === p.toLowerCase()) {
+    if (!w.isDestroyed() && w.docState.filePath && pathKey(w.docState.filePath) === pathKey(p)) {
       if (w.isMinimized()) w.restore();
       w.focus();
       return w;
@@ -329,7 +331,7 @@ if (!gotLock) {
         cb({ cancel: true });
       });
     }
-    setTimeout(startSpellHelper, 2500);
+    if (process.platform === 'win32') setTimeout(startSpellHelper, 2500);
     leftovers = scanRecovery();
     const files = filesFromArgv(process.argv, process.cwd());
     if (files.length) files.forEach((f) => createWindow(f));
@@ -711,6 +713,7 @@ function userChoice(ext) {
 }
 
 trustedIpc.handle('app:default-status', async () => {
+  if (process.platform === 'linux') return linux.defaultStatus();
   if (process.platform !== 'win32') return {};
   const out = {};
   await Promise.all(DEFAULT_EXTS.map(async (e) => {
@@ -725,7 +728,7 @@ trustedIpc.handle('pdf:view-original', (event, p) => {
   if (!p || !/\.pdf$/i.test(p) || !isSupportedFile(p)) return false;
   const parent = windowFor(event);
   const pb = parent && !parent.isDestroyed() ? parent.getBounds() : { x: undefined, y: undefined, width: 1100, height: 860 };
-  const iconPath = path.join(__dirname, 'app', 'icons', 'redator.ico');
+  const iconPath = path.join(__dirname, 'app', 'icons', process.platform === 'win32' ? 'redator.ico' : 'redator.png');
   const w = new BrowserWindow({
     x: pb.x != null ? pb.x + 36 : undefined, y: pb.y != null ? pb.y + 36 : undefined,
     width: Math.max(800, pb.width - 72), height: Math.max(600, pb.height - 72),
@@ -746,6 +749,7 @@ trustedIpc.handle('pdf:view-original', (event, p) => {
 });
 
 trustedIpc.handle('app:open-default-apps', async () => {
+  if (process.platform !== 'win32') return false;
   try { await shell.openExternal('ms-settings:defaultapps?registeredAppUser=Redator'); } catch {
     try { await shell.openExternal('ms-settings:defaultapps'); } catch { return false; }
   }
@@ -1026,11 +1030,12 @@ function ocrQuery(file) {
 }
 
 trustedIpc.handle('ocr:image', async (_e, data, ext) => {
-  if (process.platform !== 'win32') return { err: 'O reconhecimento de texto só existe no Windows.' };
+  if (!['win32', 'linux'].includes(process.platform)) return { err: 'Reconhecimento indisponível neste sistema.' };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'redator-ocr-'));
   const file = path.join(dir, 'pagina.' + (ext === 'png' ? 'png' : 'jpg'));
   try {
     fs.writeFileSync(file, Buffer.from(data));
+    if (process.platform === 'linux') return await linux.recognizeImage(file);
     const out = await ocrQuery(file);
     if (!out) return { err: 'O reconhecimento de texto não respondeu.' };
     const res = JSON.parse(out);
@@ -1048,6 +1053,7 @@ trustedIpc.handle('ocr:image', async (_e, data, ext) => {
 let fontCache = null;
 function listSystemFonts() {
   if (fontCache) return Promise.resolve(fontCache);
+  if (process.platform === 'linux') return linux.listFonts().then((fonts) => (fontCache = fonts));
   const keys = ['HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts', 'HKCU\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts'];
   const run = (key) => new Promise((resolve) => {
     execFile('reg', ['query', key], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => resolve(err ? '' : stdout));
@@ -1074,6 +1080,14 @@ function listSystemFonts() {
 // ---------------------------------------------------------------- conversão de imagens (EMF, WMF, TIFF)
 
 function convertImage(data, ext, width, height) {
+  if (process.platform === 'linux') return (async () => {
+    const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'redator-img-'));
+    try {
+      const file = path.join(dir, 'imagem');
+      await fs.promises.writeFile(file, Buffer.from(data));
+      return await linux.convertImage(file, String(ext).toLowerCase(), width, height);
+    } finally { await fs.promises.rm(dir, { recursive: true, force: true }); }
+  })();
   if (process.platform !== 'win32') return Promise.resolve(null);
   return new Promise((resolve) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'redator-img-'));

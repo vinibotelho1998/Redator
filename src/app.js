@@ -369,9 +369,13 @@ class App {
     for (const p of paths) await this.openPath(p);
   }
 
+  samePath(a, b) {
+    return this.host.platform === 'win32' ? String(a).toLowerCase() === String(b).toLowerCase() : a === b;
+  }
+
   async openPath(p) {
     if (!p) return;
-    if (this.filePath && this.filePath.toLowerCase() === String(p).toLowerCase()) return;
+    if (this.filePath && this.samePath(this.filePath, p)) return;
     if (this.isPristine()) {
       try { await this.loadPath(p); }
       catch (err) { this.showError('Não foi possível abrir "' + baseName(p) + '".', err); }
@@ -749,7 +753,7 @@ class App {
     const name = keepExt ? this.docName : stripExt(this.docName) + '.' + (fmt === 'md' ? 'md' : fmt);
     const filters = keepExt ? [{ name: 'Arquivo .' + origExt, extensions: [origExt] }, ...FORMAT_INFO.txt.filters] : (FORMAT_INFO[fmt] || FORMAT_INFO.docx).filters;
     const dir = this.filePath ? dirName(this.filePath) : this.importPath ? dirName(this.importPath) : null;
-    const path = await this.host.saveDialog({ title: 'Salvar como', defaultPath: dir ? dir + '\\' + name : name, filters });
+    const path = await this.host.saveDialog({ title: 'Salvar como', defaultPath: dir ? dir.replace(/[\\/]$/, '') + (this.host.platform === 'win32' ? '\\' : '/') + name : name, filters });
     if (!path) return false;
     if (extOf(path) === 'pdf') { await this.exportPdf(path); return false; }
     const realFmt = EXT_FORMAT[extOf(path)] || fmt;
@@ -814,7 +818,7 @@ class App {
       if (this.recoverJob) await this.recoverJob;
       const model = this.model;
       const stamp = this.editStamp;
-      const expected = this.fileStamp && String(this.fileStamp.path).toLowerCase() === String(path).toLowerCase() ? this.fileStamp : undefined;
+      const expected = this.fileStamp && this.samePath(this.fileStamp.path, path) ? this.fileStamp : undefined;
       const { data, extras } = await this.serialize(fmt, path);
       let res = await this.host.writeFile(path, data, extras, expected ? { expected } : {});
       while (res && res.error === 'ECONFLICT') {
@@ -932,7 +936,7 @@ class App {
   async exportPdf(target) {
     const name = stripExt(this.docName) + '.pdf';
     const dir = this.filePath ? dirName(this.filePath) : this.importPath ? dirName(this.importPath) : null;
-    const path = typeof target === 'string' ? target : await this.host.saveDialog({ title: 'Publicar como PDF', defaultPath: dir ? dir + '\\' + name : name, filters: FORMAT_INFO.pdf.filters });
+    const path = typeof target === 'string' ? target : await this.host.saveDialog({ title: 'Publicar como PDF', defaultPath: dir ? dir.replace(/[\\/]$/, '') + (this.host.platform === 'win32' ? '\\' : '/') + name : name, filters: FORMAT_INFO.pdf.filters });
     if (!path) return;
     await this.preparePrint();
     let res;
@@ -1111,7 +1115,16 @@ class App {
 
   scheduleUI() {
     if (this.uiFrame) return;
-    this.uiFrame = requestAnimationFrame(() => { this.uiFrame = null; this.updateUI(); });
+    // Uma superfície Wayland oculta pode ficar sem quadros. A barra e seus
+    // estados acessíveis também precisam refletir a última transação nesse caso.
+    const update = () => {
+      clearTimeout(timer);
+      cancelAnimationFrame(this.uiFrame);
+      this.uiFrame = null;
+      this.updateUI();
+    };
+    const timer = setTimeout(update, 60);
+    this.uiFrame = requestAnimationFrame(update);
   }
 
   currentFontName(r) {
@@ -1785,17 +1798,27 @@ class App {
       if (/^(https?:|mailto:)/i.test(href)) { this.host.openExternal(href); return; }
       let path = null;
       let anchor = null;
-      if (/^file:/i.test(href)) path = decodeURI(href.replace(/^file:\/\/\/?/, '')).replace(/\//g, '\\');
+      if (/^file:/i.test(href)) {
+        try {
+          const url = new URL(href);
+          path = decodeURIComponent(url.pathname);
+          anchor = decodeURIComponent(url.hash.slice(1));
+          if (this.host.platform === 'win32') {
+            path = (url.hostname ? '//' + url.hostname + path : path.replace(/^\/([a-z]:)/i, '$1')).replace(/\//g, '\\');
+          } else if (url.hostname && url.hostname !== 'localhost') return;
+        } catch { return; }
+      }
       else if (this.filePath && !/^[a-z]+:/i.test(href)) {
         const [rel, hash] = href.split('#');
         anchor = hash || null;
         let clean = rel;
         try { clean = decodeURIComponent(rel); } catch { /* mantém */ }
-        path = dirName(this.filePath) + '\\' + clean.replace(/\//g, '\\');
+        const sep = this.host.platform === 'win32' ? '\\' : '/';
+        path = !clean ? this.filePath : clean.startsWith('/') ? clean : dirName(this.filePath).replace(/[\\/]$/, '') + sep + clean.replace(/\//g, sep);
       }
       if (!path) return;
       if (EXT_FORMAT[extOf(path)]) {
-        if (this.filePath && path.toLowerCase() === this.filePath.toLowerCase()) { if (anchor) this.gotoBookmark(anchor); return; }
+        if (this.filePath && this.samePath(path, this.filePath)) { if (anchor) this.gotoBookmark(anchor); return; }
         if (await this.host.fileExists(path)) { this.openPath(path); return; }
       }
       this.host.openPath(path);
@@ -1811,7 +1834,7 @@ class App {
     if (!this.filePath || !this.host.findNote) return;
     const found = await this.host.findNote(this.filePath, target);
     if (!found) { this.setInfo('Nota "' + name + '" não encontrada'); return; }
-    if (found.toLowerCase() === this.filePath.toLowerCase()) { if (heading) this.gotoBookmark(heading); return; }
+    if (this.samePath(found, this.filePath)) { if (heading) this.gotoBookmark(heading); return; }
     if (EXT_FORMAT[extOf(found)]) this.openPath(found);
     else this.host.openPath(found);
   }
