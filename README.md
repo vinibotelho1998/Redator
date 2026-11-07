@@ -19,6 +19,8 @@
   <img src="https://img.shields.io/badge/licen%C3%A7a-MIT-2ea44f" alt="Licença MIT">
 </p>
 
+[Baixar para Linux x86-64 (.tar.gz)](https://github.com/vinibotelho1998/Redator/releases/latest/download/Redator-linux-x64.tar.gz) · [Baixar para Windows (.exe)](https://github.com/vinibotelho1998/Redator/releases/latest/download/Redator-Setup.exe)
+
 <p align="center">
   <img src="docs/imagens/documento.png" alt="Relatório de exemplo aberto no Redator" width="920">
 </p>
@@ -125,9 +127,19 @@ dois casos, salvar grava um arquivo novo ao lado e não toca no original.
 
 ## Linux
 
-Execute `./Iniciar-Redator.sh` nesta pasta. O pacote incluído é para Linux x86-64 e
-contém o Electron. Para abrir um arquivo, passe seu caminho como argumento. Para
-registrar no menu de aplicativos e em **Abrir com**, execute `./instalar-menu.sh`
+Baixe **Redator-linux-x64.tar.gz** e **Redator-linux-x64.sha256** na
+[última release](https://github.com/vinibotelho1998/Redator/releases/latest).
+Na pasta dos downloads, confira o checksum, extraia e abra o aplicativo.
+
+```sh
+sha256sum -c Redator-linux-x64.sha256
+tar -xzf Redator-linux-x64.tar.gz
+cd Redator
+./Iniciar-Redator.sh
+```
+
+O pacote contém o Electron. Para abrir um arquivo, passe seu caminho como argumento.
+Para registrar no menu de aplicativos e em **Abrir com**, execute `./instalar-menu.sh`
 depois de colocar a pasta no local definitivo. O registro usa Python 3.
 
 O OCR local usa Tesseract e os dados de idioma português (`por`). O Redator usa
